@@ -32,7 +32,7 @@ function Confrontante({ p1, p2, nome }) {
 
 /* ========= TERRENO ========= */
 export function Terreno({ mostrarConfrontantes }) {
-  const { scene } = useGLTF("models/Douglas.glb"); // caminho para o modelo otimizado
+  const { scene } = useGLTF("models/terreno.glb"); // caminho para o modelo otimizado
 
   const lados = [
     { p1: { x: -1, z: -12 }, p2: { x: 10, z: -1 }, nome: "Eliseu Vieira Tuelher" },
