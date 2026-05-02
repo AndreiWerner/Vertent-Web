@@ -1,55 +1,141 @@
-import { useGLTF, Text } from "@react-three/drei";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { WebView } from "react-native-webview";
+import { useLocalSearchParams } from "expo-router";
 
-/* ========= COMPONENTE DO TEXTO ========= */
-function Confrontante({ p1, p2, nome }) {
-  let angle = Math.atan2(p2.z - p1.z, p2.x - p1.x);
+export default function Terreno() {
+  const params = useLocalSearchParams();
 
-  // Evita texto de cabeça pra baixo
-  if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
-    angle += Math.PI;
-  }
-
-  const midX = (p1.x + p2.x) / 2;
-  const midZ = (p1.z + p2.z) / 2;
-
-
+  const url = params.url;
+  const matricula = params.matricula;
+  const area = params.area;
+  const perimetro = params.perimetro;
+  const alturaMax = params.altura_max;
+  const alturaMin = params.altura_min;
 
   return (
-    <Text
-      position={[midX, 1.88, midZ]}   // levemente acima do terreno
-      rotation={[-Math.PI / 2, 0, -angle]}
-      fontSize={0.6}
-      color="black"
-      outlineWidth={0.03}
-      outlineColor="white"
-      anchorX="center"
-      anchorY="middle"
-    >
-      {nome}
-    </Text>
+    <View style={styles.container}>
+
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Text style={styles.headerSubtitle}>Registro do Terreno</Text>
+        <Text style={styles.headerTitle}>
+          Matrícula • {matricula}
+        </Text>
+      </View>
+
+      {/* 🔥 WEBVIEW COM GLB DINÂMICO */}
+    <WebView
+  source={{ uri: url }}
+  javaScriptEnabled={true}
+  domStorageEnabled={true}
+  originWhitelist={["*"]}
+  mixedContentMode="always"
+  allowFileAccess={true}
+  allowsInlineMediaPlayback={true}
+  mediaPlaybackRequiresUserAction={false}
+  startInLoadingState={true}
+  renderLoading={() => (
+    <ActivityIndicator size="large" style={{ flex: 1 }} />
+  )}
+  style={{ flex: 1 }}
+/>
+
+      {/* CARD */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>📐 Informações Técnicas</Text>
+
+        <View style={styles.grid}>
+          <Info label="Área" value={area} />
+          <Info label="Perímetro" value={perimetro} />
+          <Info label="Altura Máx." value={alturaMax} />
+          <Info label="Altura Mín." value={alturaMin} />
+        </View>
+      </View>
+
+    </View>
   );
 }
 
-/* ========= TERRENO ========= */
-export function Terreno({ mostrarConfrontantes }) {
-  const { scene } = useGLTF("models/terreno.glb"); // caminho para o modelo otimizado
-
-  const lados = [
-    { p1: { x: -1, z: -12 }, p2: { x: 10, z: -1 }, nome: "Eliseu Vieira Tuelher" },
-    { p1: { x: 11, z: 1 }, p2: { x: -3, z: 7 }, nome: "Maria de Souza" },
-    { p1: { x: -4, z: 5 }, p2: { x: -7, z: -10 }, nome: "Rua Municipal" },
-  ];
-
+function Info({ label, value }) {
   return (
-    <>
-      {/* Modelo 3D */}
-      <primitive object={scene} scale={1} />
-
-      {/* Confrontantes */}
-      {mostrarConfrontantes &&
-        lados.map((lado, i) => (
-          <Confrontante key={i} {...lado} />
-        ))}
-    </>
+    <View style={styles.infoBox}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+
+  header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 18,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+    backgroundColor: "rgba(15,15,15,0.9)",
+    zIndex: 10,
+  },
+
+  headerSubtitle: {
+    color: "#aaa",
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  card: {
+    position: "absolute",
+    bottom: 24,
+    left: 16,
+    right: 16,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 20,
+    padding: 18,
+  },
+
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 14,
+  },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  infoBox: {
+    width: "48%",
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#f4f6f8",
+    marginBottom: 12,
+  },
+
+  infoLabel: {
+    fontSize: 12,
+    color: "#777",
+    marginBottom: 4,
+  },
+
+  infoValue: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#111",
+  },
+});
