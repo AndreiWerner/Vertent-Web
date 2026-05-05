@@ -1,11 +1,23 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Terrenos } from "./components/Terrenos";
 
 function App() {
-  const [interagindo, setInteragindo] = useState(false);
-  const [ativo, setAtivo] = useState(1);
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get("url");
+
+    if (urlParam) {
+      setUrl(urlParam);
+    } else {
+      setUrl("http://localhost:5174/models/terreno.glb");
+    }
+  }, []);
+
+  if (!url) return <p>Carregando...</p>;
 
   return (
     <div
@@ -13,7 +25,7 @@ function App() {
         width: "100vw",
         height: "100vh",
 
-        // GRID FIXO
+        // 🔥 FUNDO CARTOGRÁFICO
         backgroundColor: "#ffffff",
         backgroundImage: `
           linear-gradient(#e5e5e5 1px, transparent 1px),
@@ -22,34 +34,24 @@ function App() {
         backgroundSize: "40px 40px",
       }}
     >
-      {/* BOTÕES */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 20,
-          zIndex: 10,
-        }}
-      >
-        <button onClick={() => setAtivo(1)}>Terreno 1</button>
-        <button onClick={() => setAtivo(2)}>Terreno 2</button>
-      </div>
-
       <Canvas
-        camera={{ position: [10, 10, 10], fov: 50 }}
+        camera={{ position: [15, 12, 15], fov: 50 }}
         style={{ background: "transparent" }}
       >
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[10, 10, 10]} />
+        {/* Luz suave */}
+        <ambientLight intensity={1.5} />
 
-        <Terrenos
-          ativo={ativo}
-          mostrarConfrontantes={!interagindo}
-        />
+        {/* Luz principal */}
+        <directionalLight position={[10, 15, 10]} intensity={2} />
 
+        {/* Terreno */}
+        <Terrenos url={url} />
+
+        {/* Controles */}
         <OrbitControls
-          onStart={() => setInteragindo(true)}
-          onEnd={() => setInteragindo(false)}
+          enablePan
+          enableZoom
+          enableRotate
         />
       </Canvas>
     </div>
