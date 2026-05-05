@@ -17,7 +17,7 @@ export function Terrenos({ url }) {
   return (
     <primitive
       object={scene}
-      scale={0.01}
+      scale={0.5}
       position={[0, 0, 0]}
     />
   );
