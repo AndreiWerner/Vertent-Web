@@ -35,7 +35,7 @@ function App() {
       }}
     >
       <Canvas
-        camera={{ position: [15, 12, 15], fov: 50 }}
+        camera={{ position: [14, 12, 15], fov: 50 }}
         style={{ background: "transparent" }}
       >
         {/* Luz suave */}
