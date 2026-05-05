@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-family: Arial;
+    }
+  </style>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js";
+    import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/loaders/GLTFLoader.js";
+    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/controls/OrbitControls.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const modelUrl = params.get("model");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light1 = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(light1);
+
+    const light2 = new THREE.DirectionalLight(0xffffff, 1);
+    light2.position.set(5, 10, 7);
+    scene.add(light2);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+
+    const loader = new GLTFLoader();
+
+    const loadingText = document.createElement("div");
+    loadingText.id = "loading";
+    loadingText.innerText = "Carregando terreno...";
+    document.body.appendChild(loadingText);
+
+    loader.load(modelUrl, (gltf) => {
+      const model = gltf.scene;
+      scene.add(model);
+
+      // 🔥 Centralizar e ajustar zoom automático
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+
+      model.position.sub(center);
+
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const distance = maxDim * 2;
+
+      camera.position.set(distance, distance, distance);
+      controls.target.set(0, 0, 0);
+      controls.update();
+
+      loadingText.remove();
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</head>
+<body></body>
+</html>
