@@ -1,7 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Suspense, useEffect, useState } from "react";
-import { Terrenos } from "./components/Terrenos";
+import { Terrenos } from "./components/terrenos";
 
 function ViewerLoading() {
   return (
