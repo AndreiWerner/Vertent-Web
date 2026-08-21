@@ -1,31 +1,69 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Terrenos } from "./components/Terrenos";
+
+function ViewerLoading() {
+  return (
+    <div
+      style={{
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#ffffff",
+        color: "#16241c",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      Carregando terreno...
+    </div>
+  );
+}
 
 function App() {
   const [url, setUrl] = useState(null);
+  const [erro, setErro] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlParam = params.get("url");
 
-    if (urlParam) {
-      setUrl(urlParam);
-    } else {
-      setUrl("http://localhost:5174/models/terreno.glb");
+    if (!urlParam) {
+      setErro("Nenhum terreno foi informado.");
+      return;
     }
+
+    setUrl(urlParam);
   }, []);
 
-  if (!url) return <p>Carregando...</p>;
+  if (erro) {
+    return (
+      <div
+        style={{
+          width: "100vw",
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#ffffff",
+          color: "#16241c",
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        {erro}
+      </div>
+    );
+  }
+
+  if (!url) return <ViewerLoading />;
 
   return (
     <div
       style={{
         width: "100vw",
         height: "100vh",
-
-        // 🔥 FUNDO CARTOGRÁFICO
         backgroundColor: "#ffffff",
         backgroundImage: `
           linear-gradient(#e5e5e5 1px, transparent 1px),
@@ -38,21 +76,14 @@ function App() {
         camera={{ position: [14, 12, 15], fov: 50 }}
         style={{ background: "transparent" }}
       >
-        {/* Luz suave */}
         <ambientLight intensity={1.5} />
-
-        {/* Luz principal */}
         <directionalLight position={[10, 15, 10]} intensity={2} />
 
-        {/* Terreno */}
-        <Terrenos url={url} />
+        <Suspense fallback={null}>
+          <Terrenos url={url} />
+        </Suspense>
 
-        {/* Controles */}
-        <OrbitControls
-          enablePan
-          enableZoom
-          enableRotate
-        />
+        <OrbitControls enablePan enableZoom enableRotate />
       </Canvas>
     </div>
   );
