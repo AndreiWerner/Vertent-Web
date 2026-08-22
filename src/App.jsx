@@ -15,12 +15,8 @@ function isValidHttpUrl(value) {
   }
 }
 
-// window.location já está disponível de forma síncrona (SPA pura, sem
-// SSR), então não precisa de useEffect pra isso - calcular direto no
-// useState evita um render extra e o problema de setState em effect.
 function computeInitialStatus() {
   const params = new URLSearchParams(window.location.search);
-  // URLSearchParams já decodifica o valor automaticamente.
   const urlParam = params.get("url");
 
   if (!urlParam || !urlParam.trim()) {
@@ -35,8 +31,6 @@ function computeInitialStatus() {
   return { state: "ready", url: urlParam };
 }
 
-// Overlay de carregamento (usa o useProgress do drei, que já
-// acompanha o useGLTF automaticamente - nenhuma dependência nova).
 function LoadingOverlay() {
   const { active, progress } = useProgress();
 
@@ -55,7 +49,6 @@ function LoadingOverlay() {
 }
 
 function App() {
-  // "missing" | "invalid" | "ready"
   const [status] = useState(computeInitialStatus);
 
   if (status.state === "missing") {
@@ -72,7 +65,15 @@ function App() {
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", ...cartographicBackground }}>
+    <div
+      style={{
+        width: "100vw",
+        height: "100vh",
+        position: "relative",
+        overflow: "hidden",
+        ...cartographicBackground,
+      }}
+    >
       <ModelErrorBoundary
         fallback={
           <StatusScreen
@@ -82,22 +83,39 @@ function App() {
         }
       >
         <Canvas
-          camera={{ position: [14, 12, 15], fov: 50 }}
-          style={{ background: "transparent" }}
+          camera={{
+            position: [8, 6, 8],
+            fov: 50,
+            near: 0.01,
+            far: 1000000,
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "transparent",
+          }}
+          gl={{ antialias: true, alpha: true }}
         >
-          {/* Luz suave */}
           <ambientLight intensity={1.5} />
-
-          {/* Luz principal */}
           <directionalLight position={[10, 15, 10]} intensity={2} />
 
-          {/* Terreno */}
           <Suspense fallback={null}>
             <Terrenos url={status.url} />
           </Suspense>
 
-          {/* Controles */}
-          <OrbitControls enablePan enableZoom enableRotate />
+          <OrbitControls
+            makeDefault
+            enablePan
+            enableZoom
+            enableRotate
+            enableDamping
+            dampingFactor={0.08}
+            rotateSpeed={0.8}
+            zoomSpeed={0.9}
+            panSpeed={0.8}
+            minDistance={0.01}
+            maxDistance={1000000}
+          />
         </Canvas>
 
         <LoadingOverlay />
