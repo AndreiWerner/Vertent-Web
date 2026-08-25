@@ -94,10 +94,10 @@ function App() {
             inset: 0,
             background: "transparent",
           }}
-          gl={{ antialias: true, alpha: true }}
+          gl={{ antialias: true, alpha: true, logarithmicDepthBuffer: true }}
         >
-          <ambientLight intensity={1.5} />
-          <directionalLight position={[10, 15, 10]} intensity={2} />
+          <ambientLight intensity={2.5} />
+          <directionalLight position={[16, 15, 10]} intensity={2} />
 
           <Suspense fallback={null}>
             <Terrenos url={status.url} />
