@@ -3,10 +3,20 @@ import { useThree } from "@react-three/fiber";
 import { Box3, Vector3 } from "three";
 import { useEffect, useRef } from "react";
 
-export function Terrenos({ url }) {
+export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
   const { scene } = useGLTF(url);
   const fittedUrl = useRef(null);
   const { camera, controls } = useThree();
+  // Guarda a posição/alvo da câmera de ANTES de entrar no modo
+  // Confrontantes, pra poder devolver exatamente o mesmo enquadramento
+  // 3D de antes quando o usuário desativa o modo (ETAPA 3, seção 7:
+  // "Quando desativado: terreno normal").
+  const cameraAnterior = useRef(null);
+  const modoAnterior = useRef(false);
+  // Bounding box já calculada pelo efeito de enquadramento abaixo --
+  // reaproveitada pelo modo Confrontantes pra não recalcular e pra
+  // nunca usar um valor "no chute" (ETAPA 3, seção 8/9).
+  const fittedInfo = useRef(null);
 
   useEffect(() => {
     scene.traverse((child) => {
@@ -23,6 +33,23 @@ export function Terrenos({ url }) {
       });
     });
   }, [scene]);
+
+  // Acha o node que carrega os extras gravados pelo Topo Textura
+  // (topotexture_origin_x/y/z -- ver export/gltf_exporter.py). O
+  // GLTFLoader copia `extras` do glTF para `userData` automaticamente.
+  // Terrenos gerados antes dessa funcionalidade existir (ou vindos de
+  // outra fonte) simplesmente não têm esse node -- `onTerrenoNode` é
+  // chamado com `null` e o modo Confrontantes fica indisponível pra
+  // esse terreno, sem quebrar nada (ETAPA 3, seção 11).
+  useEffect(() => {
+    let encontrado = null;
+    scene.traverse((child) => {
+      if (!encontrado && child.userData?.topotexture_origin_x !== undefined) {
+        encontrado = child;
+      }
+    });
+    onTerrenoNode?.(encontrado);
+  }, [scene, onTerrenoNode]);
 
   useEffect(() => {
     if (!scene || fittedUrl.current === url) return;
@@ -76,8 +103,37 @@ export function Terrenos({ url }) {
       controls.update();
     }
 
+    fittedInfo.current = { center: fittedCenter, maxSize };
     fittedUrl.current = url;
   }, [scene, url, camera, controls]);
+
+  // Visão superior do modo Confrontantes (ETAPA 3, seção 8): não usa
+  // nenhuma posição fixa -- a altura da câmera é um múltiplo do maior
+  // lado do bounding box já calculado acima, então funciona igual pra
+  // terrenos de qualquer tamanho. Ao desativar, devolve a câmera
+  // exatamente pra onde estava antes de entrar no modo.
+  useEffect(() => {
+    if (!controls || !fittedInfo.current) return;
+    if (modoConfrontantes === modoAnterior.current) return;
+
+    if (modoConfrontantes) {
+      cameraAnterior.current = {
+        position: camera.position.clone(),
+        target: controls.target.clone(),
+      };
+
+      const { center, maxSize } = fittedInfo.current;
+      camera.position.set(center.x, center.y + maxSize * 1.6, center.z + 0.0001);
+      controls.target.set(center.x, center.y, center.z);
+    } else if (cameraAnterior.current) {
+      camera.position.copy(cameraAnterior.current.position);
+      controls.target.copy(cameraAnterior.current.target);
+    }
+
+    camera.updateProjectionMatrix();
+    controls.update();
+    modoAnterior.current = modoConfrontantes;
+  }, [modoConfrontantes, camera, controls]);
 
   return <primitive object={scene} />;
 }

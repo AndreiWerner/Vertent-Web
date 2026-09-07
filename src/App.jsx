@@ -1,10 +1,12 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useProgress } from "@react-three/drei";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Terrenos } from "./components/Terrenos";
+import { Confrontantes } from "./components/Confrontantes";
 import { StatusScreen } from "./components/StatusScreen";
 import { ModelErrorBoundary } from "./components/ModelErrorBoundary";
 import { cartographicBackground } from "./theme";
+import { buscarTerrenoPublico } from "./backend";
 
 function isValidHttpUrl(value) {
   try {
@@ -18,6 +20,12 @@ function isValidHttpUrl(value) {
 function computeInitialStatus() {
   const params = new URLSearchParams(window.location.search);
   const urlParam = params.get("url");
+  // Além da URL do GLB (já existente), a matrícula é o identificador
+  // usado pra buscar confrontantes/planta/memorial no Backend (GET
+  // /terreno-publico/:matricula). Terrenos antigos, ou links que ainda
+  // não passam esse parâmetro, continuam funcionando normalmente --
+  // só ficam sem o botão Confrontantes funcional (ETAPA 3, seção 11).
+  const matricula = params.get("matricula");
 
   if (!urlParam || !urlParam.trim()) {
     return { state: "missing" };
@@ -28,7 +36,7 @@ function computeInitialStatus() {
     return { state: "invalid" };
   }
 
-  return { state: "ready", url: urlParam };
+  return { state: "ready", url: urlParam, matricula };
 }
 
 function LoadingOverlay() {
@@ -50,6 +58,47 @@ function LoadingOverlay() {
 
 function App() {
   const [status] = useState(computeInitialStatus);
+  const [terrenoNode, setTerrenoNode] = useState(null);
+  const [modoConfrontantes, setModoConfrontantes] = useState(false);
+  // "sem-matricula" | "carregando" | "ok" | "erro" -- ver seções 11 e
+  // 16 da ETAPA 3: em qualquer caso que não seja "ok", o visualizador
+  // continua funcionando normalmente, só o botão Confrontantes muda de
+  // mensagem.
+  const [dadosTerreno, setDadosTerreno] = useState(null);
+  const [statusDados, setStatusDados] = useState(
+    status.matricula ? "carregando" : "sem-matricula"
+  );
+
+  useEffect(() => {
+    if (status.state !== "ready" || !status.matricula) return;
+
+    let cancelado = false;
+
+    buscarTerrenoPublico(status.matricula).then((dados) => {
+      if (cancelado) return;
+      if (!dados) {
+        setStatusDados("erro");
+        return;
+      }
+      setDadosTerreno(dados);
+      setStatusDados("ok");
+    });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [status.state, status.matricula]);
+
+  // Só desenha linhas/textos quando TUDO que a fórmula de
+  // transformação precisa está disponível -- nunca uma aproximação
+  // (ETAPA 3, seções 10 e 16): o GLB tem o node com o origin do Topo
+  // Textura, o Backend respondeu com sucesso, e existe pelo menos um
+  // confrontante cadastrado.
+  const dadosProntos =
+    statusDados === "ok" &&
+    !!terrenoNode &&
+    dadosTerreno?.origin_x != null &&
+    (dadosTerreno?.confrontantes?.length ?? 0) > 0;
 
   if (status.state === "missing") {
     return <StatusScreen title="Nenhum terreno foi informado." />;
@@ -100,7 +149,18 @@ function App() {
           <directionalLight position={[16, 15, 10]} intensity={2} />
 
           <Suspense fallback={null}>
-            <Terrenos url={status.url} />
+            <Terrenos
+              url={status.url}
+              onTerrenoNode={setTerrenoNode}
+              modoConfrontantes={modoConfrontantes}
+            />
+            {dadosProntos && (
+              <Confrontantes
+                terrenoNode={terrenoNode}
+                dados={dadosTerreno}
+                visivel={modoConfrontantes}
+              />
+            )}
           </Suspense>
 
           <OrbitControls
@@ -119,12 +179,101 @@ function App() {
         </Canvas>
 
         <LoadingOverlay />
+
+        <BarraDeAcoes
+          modoConfrontantes={modoConfrontantes}
+          onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
+          mostrarAvisoSemDados={modoConfrontantes && !dadosProntos}
+          plantaUrl={dadosTerreno?.planta_url}
+          memorialUrl={dadosTerreno?.memorial_url}
+        />
       </ModelErrorBoundary>
     </div>
   );
 }
 
+// [ Confrontantes ] [ Planta ] [ Memorial ] -- ETAPA 3, seção 14. Só
+// os controles necessários, sem redesenhar o resto da interface.
+function BarraDeAcoes({
+  modoConfrontantes,
+  onToggleConfrontantes,
+  mostrarAvisoSemDados,
+  plantaUrl,
+  memorialUrl,
+}) {
+  const abrirPdf = (url) => window.open(url, "_blank", "noopener,noreferrer");
+
+  return (
+    <div style={styles.barra}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={onToggleConfrontantes}
+          style={{
+            ...styles.botao,
+            ...(modoConfrontantes ? styles.botaoAtivo : null),
+          }}
+        >
+          Confrontantes
+        </button>
+        {plantaUrl && (
+          <button type="button" style={styles.botao} onClick={() => abrirPdf(plantaUrl)}>
+            Planta
+          </button>
+        )}
+        {memorialUrl && (
+          <button type="button" style={styles.botao} onClick={() => abrirPdf(memorialUrl)}>
+            Memorial
+          </button>
+        )}
+      </div>
+
+      {mostrarAvisoSemDados && (
+        <p style={styles.aviso}>
+          Não há dados de confrontantes cadastrados para este terreno.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const styles = {
+  barra: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    zIndex: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    alignItems: "flex-start",
+  },
+  botao: {
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "1px solid rgba(0,0,0,0.12)",
+    background: "rgba(255,255,255,0.92)",
+    color: "#2c3e2f",
+    fontWeight: 600,
+    fontSize: 13,
+    cursor: "pointer",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  botaoAtivo: {
+    background: "#22c55e",
+    color: "#ffffff",
+    borderColor: "#22c55e",
+  },
+  aviso: {
+    margin: 0,
+    padding: "8px 12px",
+    borderRadius: 8,
+    background: "rgba(255,255,255,0.92)",
+    color: "#7a4a00",
+    fontSize: 12,
+    maxWidth: 260,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
   loadingOverlay: {
     position: "absolute",
     top: "50%",
