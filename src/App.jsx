@@ -26,6 +26,9 @@ function computeInitialStatus() {
   // não passam esse parâmetro, continuam funcionando normalmente --
   // só ficam sem o botão Confrontantes funcional (ETAPA 3, seção 11).
   const matricula = params.get("matricula");
+  // Se o fluxo que abre o Vertente Web já indicar o modo por URL,
+  // respeita (ETAPA 3, seção 10): "?modo=confrontantes".
+  const modoInicial = params.get("modo") === "confrontantes";
 
   if (!urlParam || !urlParam.trim()) {
     return { state: "missing" };
@@ -36,7 +39,7 @@ function computeInitialStatus() {
     return { state: "invalid" };
   }
 
-  return { state: "ready", url: urlParam, matricula };
+  return { state: "ready", url: urlParam, matricula, modoInicial };
 }
 
 function LoadingOverlay() {
@@ -59,7 +62,9 @@ function LoadingOverlay() {
 function App() {
   const [status] = useState(computeInitialStatus);
   const [terrenoNode, setTerrenoNode] = useState(null);
-  const [modoConfrontantes, setModoConfrontantes] = useState(false);
+  const [modoConfrontantes, setModoConfrontantes] = useState(
+    () => status.modoInicial ?? false
+  );
   // "sem-matricula" | "carregando" | "ok" | "erro" -- ver seções 11 e
   // 16 da ETAPA 3: em qualquer caso que não seja "ok", o visualizador
   // continua funcionando normalmente, só o botão Confrontantes muda de
@@ -99,6 +104,14 @@ function App() {
     !!terrenoNode &&
     dadosTerreno?.origin_x != null &&
     (dadosTerreno?.confrontantes?.length ?? 0) > 0;
+
+  // Falha de API (ETAPA 3, seção 16) ganha uma mensagem própria;
+  // qualquer outro motivo de não ter o que desenhar usa o texto exato
+  // pedido na seção 15.
+  const avisoConfrontantes =
+    statusDados === "erro"
+      ? "Não foi possível carregar os dados deste terreno."
+      : "Não há dados de confrontantes cadastrados para este terreno.";
 
   if (status.state === "missing") {
     return <StatusScreen title="Nenhum terreno foi informado." />;
@@ -183,7 +196,7 @@ function App() {
         <BarraDeAcoes
           modoConfrontantes={modoConfrontantes}
           onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
-          mostrarAvisoSemDados={modoConfrontantes && !dadosProntos}
+          avisoConfrontantes={!dadosProntos ? avisoConfrontantes : null}
           plantaUrl={dadosTerreno?.planta_url}
           memorialUrl={dadosTerreno?.memorial_url}
         />
@@ -197,11 +210,23 @@ function App() {
 function BarraDeAcoes({
   modoConfrontantes,
   onToggleConfrontantes,
-  mostrarAvisoSemDados,
+  avisoConfrontantes,
   plantaUrl,
   memorialUrl,
 }) {
-  const abrirPdf = (url) => window.open(url, "_blank", "noopener,noreferrer");
+  // Aviso próprio dos botões de documento (ETAPA 3, seções 13/14:
+  // "Planta não cadastrada." / "Memorial Descritivo não cadastrado."),
+  // independente do aviso de confrontantes.
+  const [avisoDocumento, setAvisoDocumento] = useState(null);
+
+  const abrirOuAvisar = (url, mensagemSeAusente) => {
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      setAvisoDocumento(null);
+    } else {
+      setAvisoDocumento(mensagemSeAusente);
+    }
+  };
 
   return (
     <div style={styles.barra}>
@@ -216,23 +241,28 @@ function BarraDeAcoes({
         >
           Confrontantes
         </button>
-        {plantaUrl && (
-          <button type="button" style={styles.botao} onClick={() => abrirPdf(plantaUrl)}>
-            Planta
-          </button>
-        )}
-        {memorialUrl && (
-          <button type="button" style={styles.botao} onClick={() => abrirPdf(memorialUrl)}>
-            Memorial
-          </button>
-        )}
+        <button
+          type="button"
+          style={styles.botao}
+          onClick={() => abrirOuAvisar(plantaUrl, "Planta não cadastrada.")}
+        >
+          Planta
+        </button>
+        <button
+          type="button"
+          style={styles.botao}
+          onClick={() =>
+            abrirOuAvisar(memorialUrl, "Memorial Descritivo não cadastrado.")
+          }
+        >
+          Memorial
+        </button>
       </div>
 
-      {mostrarAvisoSemDados && (
-        <p style={styles.aviso}>
-          Não há dados de confrontantes cadastrados para este terreno.
-        </p>
+      {modoConfrontantes && avisoConfrontantes && (
+        <p style={styles.aviso}>{avisoConfrontantes}</p>
       )}
+      {avisoDocumento && <p style={styles.aviso}>{avisoDocumento}</p>}
     </div>
   );
 }
