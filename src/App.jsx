@@ -258,8 +258,9 @@ function IconePlanta() {
 const styles = {
   barra: {
     position: "absolute",
-    top: "max(16px, env(safe-area-inset-top))",
+    top: "50%",
     right: "max(16px, env(safe-area-inset-right))",
+    transform: "translateY(-50%)",
     zIndex: 10,
     display: "flex",
     flexDirection: "column",
