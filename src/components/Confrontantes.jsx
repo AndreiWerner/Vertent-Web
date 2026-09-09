@@ -95,11 +95,33 @@ function direcaoExterna(indices, anel, orientacao) {
   return new Vector3(direcao.z, 0, -direcao.x).multiplyScalar(orientacao >= 0 ? 1 : -1);
 }
 
-function posicaoDoRotulo(ancora, externo, comprimento, tamanhoTerreno, anel, rotulos) {
-  const afastamento = Math.min(Math.max(tamanhoTerreno * 0.035, comprimento * 0.18), tamanhoTerreno * 0.2);
+function metricasDoTexto(nome, matricula, tamanhoFonte) {
+  const maiorLinha = Math.max(nome.length, `Matrícula: ${matricula}`.length);
+  const largura = maiorLinha * tamanhoFonte * 0.56;
+  const altura = tamanhoFonte * 2.5;
+  return { raio: Math.hypot(largura, altura) / 2, folga: tamanhoFonte * 0.7 };
+}
+
+function rotuloInterseccionaTerreno(centro, raio, anel) {
+  if (pontoNoPoligono(centro, anel)) return true;
+  for (let indice = 0; indice < 8; indice += 1) {
+    const angulo = (Math.PI * 2 * indice) / 8;
+    const borda = centro.clone().add(new Vector3(Math.cos(angulo) * raio, 0, Math.sin(angulo) * raio));
+    if (pontoNoPoligono(borda, anel)) return true;
+  }
+  return false;
+}
+
+function posicaoDoRotulo(ancora, externo, comprimento, tamanhoTerreno, anel, rotulos, metricas) {
+  // A distância inclui o raio do texto. Assim, mesmo nomes longos não
+  // encostam na divisa; ela continua proporcional ao terreno e ao trecho.
+  const afastamento = Math.max(tamanhoTerreno * 0.035, comprimento * 0.18, metricas.raio + metricas.folga);
   const candidato = ancora.clone().addScaledVector(externo, afastamento);
-  while (pontoNoPoligono(candidato, anel) && candidato.distanceTo(ancora) < tamanhoTerreno) candidato.addScaledVector(externo, afastamento * 0.5);
-  for (const anterior of rotulos) while (candidato.distanceTo(anterior) < tamanhoTerreno * 0.09) candidato.addScaledVector(externo, tamanhoTerreno * 0.04);
+  while (rotuloInterseccionaTerreno(candidato, metricas.raio, anel) && candidato.distanceTo(ancora) < tamanhoTerreno * 2) candidato.addScaledVector(externo, afastamento * 0.35);
+  for (const anterior of rotulos) {
+    const distanciaMinima = metricas.raio + anterior.raio + metricas.folga;
+    while (candidato.distanceTo(anterior.ponto) < distanciaMinima) candidato.addScaledVector(externo, metricas.folga + tamanhoTerreno * 0.025);
+  }
   return candidato;
 }
 
@@ -135,17 +157,19 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
       local.y = altura; anel.push(local);
     }
     const caixa = new Box3().setFromPoints(anel); const tamanhoTerreno = Math.max(caixa.getSize(new Vector3()).x, caixa.getSize(new Vector3()).z, 1);
-    const orientacao = areaAssinada(anel); const rotulos = []; const verticesDeTransicao = new Map(); const lista = [];
+    const orientacao = areaAssinada(anel); const tamanhoTexto = Math.max(tamanhoTerreno / 70, 0.12); const rotulos = []; const verticesDeTransicao = new Map(); const lista = [];
     for (const confrontante of dados.confrontantes) {
       const inicio = porNumero.get(numeroPonto(confrontante.ponto_inicio)); const fim = porNumero.get(numeroPonto(confrontante.ponto_fim));
       if (inicio === undefined || fim === undefined) continue;
       const indices = indicesDoIntervalo(inicio, fim, anel.length); if (indices.length < 2) continue;
       const centro = centroDoTrecho(indices, anel); const externo = direcaoExterna(indices, anel, orientacao);
-      const rotulo = posicaoDoRotulo(centro.ponto, externo, centro.comprimento, tamanhoTerreno, anel, rotulos); rotulo.y = centro.ponto.y + ALTURA_ACIMA_DO_TERRENO * 2; rotulos.push(rotulo);
+      const nome = confrontante.nome || "Confrontante"; const matricula = confrontante.matricula || "Não informada";
+      const metricas = metricasDoTexto(nome, matricula, tamanhoTexto);
+      const rotulo = posicaoDoRotulo(centro.ponto, externo, centro.comprimento, tamanhoTerreno, anel, rotulos, metricas); rotulo.y = centro.ponto.y + ALTURA_ACIMA_DO_TERRENO * 2; rotulos.push({ ponto: rotulo, raio: metricas.raio });
       verticesDeTransicao.set(indices[0], externo); verticesDeTransicao.set(indices[indices.length - 1], externo);
-      lista.push({ key: `${confrontante.ordem ?? ""}-${numeroPonto(confrontante.ponto_inicio)}-${numeroPonto(confrontante.ponto_fim)}`, nome: confrontante.nome || "Confrontante", matricula: confrontante.matricula || "Não informada", trecho: indices.map((indice) => anel[indice].toArray()), ancora: centro.ponto.toArray(), rotulo: rotulo.toArray() });
+      lista.push({ key: `${confrontante.ordem ?? ""}-${numeroPonto(confrontante.ponto_inicio)}-${numeroPonto(confrontante.ponto_fim)}`, nome, matricula, trecho: indices.map((indice) => anel[indice].toArray()), ancora: centro.ponto.toArray(), rotulo: rotulo.toArray(), pontaLinha: rotulo.clone().addScaledVector(externo, -metricas.raio).toArray() });
     }
-    const tamanhoTexto = Math.max(tamanhoTerreno / 70, 0.12); const tamanhoDivisor = Math.max(tamanhoTerreno * 0.018, tamanhoTexto * 0.8);
+    const tamanhoDivisor = Math.max(tamanhoTerreno * 0.018, tamanhoTexto * 0.8);
     return { perimetro: [...anel, anel[0]].map((ponto) => ponto.toArray()), segmentos: lista, divisores: [...verticesDeTransicao].map(([indice, externo]) => { const vertice = anel[indice]; return [vertice.clone().addScaledVector(externo, -tamanhoDivisor).toArray(), vertice.clone().addScaledVector(externo, tamanhoDivisor).toArray()]; }), escala: tamanhoTexto };
   })();
 
@@ -154,7 +178,7 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     <Line points={perimetro} color="#f8fafc" lineWidth={2.5} />
     {segmentos.map((segmento) => <group key={segmento.key}>
       <Line points={segmento.trecho} color="#16a34a" lineWidth={3.5} />
-      <Line points={[segmento.ancora, segmento.rotulo]} color="#14532d" lineWidth={1.5} />
+      <Line points={[segmento.ancora, segmento.pontaLinha]} color="#14532d" lineWidth={1.5} />
       <Text position={segmento.rotulo} rotation={[-Math.PI / 2, 0, 0]} fontSize={escala} color="#14532d" anchorX="center" anchorY="middle" outlineWidth={escala * 0.08} outlineColor="#ffffff">{`${segmento.nome}\nMatrícula: ${segmento.matricula}`}</Text>
     </group>)}
     {divisores.map((pontos, indice) => <Line key={`divisor-${indice}`} points={pontos} color="#0f172a" lineWidth={2} />)}
