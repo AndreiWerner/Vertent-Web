@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
 import { Line, Text } from "@react-three/drei";
+import { createPortal } from "@react-three/fiber";
 import { Box3, Matrix4, Raycaster, Vector3 } from "three";
 
 const ALTURA_ACIMA_DO_TERRENO = 0.02;
@@ -135,15 +135,6 @@ function origemDoModelo(terrenoNode, dados) {
 }
 
 export function Confrontantes({ terrenoNode, dados, visivel }) {
-  const grupoRef = useRef();
-
-  useEffect(() => {
-    const grupo = grupoRef.current;
-    if (!visivel || !terrenoNode || !grupo) return undefined;
-    terrenoNode.add(grupo);
-    return () => terrenoNode.remove(grupo);
-  }, [terrenoNode, visivel]);
-
   const { perimetro, segmentos, divisores, escala } = (() => {
     if (!terrenoNode || !dados?.confrontantes?.length || !(dados.pontos?.length >= 3)) return { perimetro: [], segmentos: [], divisores: [], escala: 1 };
     const origin = origemDoModelo(terrenoNode, dados);
@@ -173,14 +164,17 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     return { perimetro: [...anel, anel[0]].map((ponto) => ponto.toArray()), segmentos: lista, divisores: [...verticesDeTransicao].map(([indice, externo]) => { const vertice = anel[indice]; return [vertice.clone().addScaledVector(externo, -tamanhoDivisor).toArray(), vertice.clone().addScaledVector(externo, tamanhoDivisor).toArray()]; }), escala: tamanhoTexto };
   })();
 
-  if (!visivel) return null;
-  return <group ref={grupoRef}>
-    <Line points={perimetro} color="#f8fafc" lineWidth={2.5} />
+  if (!terrenoNode) return null;
+  // O portal e os recursos Three.js permanecem montados entre cliques.
+  // O toggle muda somente a visibilidade, evitando disposal/remount de
+  // Line/Text e sem tocar no GLB, Canvas ou câmera.
+  return createPortal(<group visible={visivel}>
+    <Line points={perimetro} color="#111827" lineWidth={3} />
     {segmentos.map((segmento) => <group key={segmento.key}>
       <Line points={segmento.trecho} color="#16a34a" lineWidth={3.5} />
       <Line points={[segmento.ancora, segmento.pontaLinha]} color="#14532d" lineWidth={1.5} />
       <Text position={segmento.rotulo} rotation={[-Math.PI / 2, 0, 0]} fontSize={escala} color="#14532d" anchorX="center" anchorY="middle" outlineWidth={escala * 0.08} outlineColor="#ffffff">{`${segmento.nome}\nMatrícula: ${segmento.matricula}`}</Text>
     </group>)}
     {divisores.map((pontos, indice) => <Line key={`divisor-${indice}`} points={pontos} color="#0f172a" lineWidth={2} />)}
-  </group>;
+  </group>, terrenoNode);
 }

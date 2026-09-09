@@ -208,25 +208,28 @@ function BarraDeAcoes({
 
   return (
     <div style={styles.barra}>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <button
           type="button"
           onClick={onToggleConfrontantes}
+          aria-label="Mostrar ou ocultar confrontantes"
+          aria-pressed={modoConfrontantes}
+          title="Confrontantes"
           style={{
             ...styles.botao,
             ...(modoConfrontantes ? styles.botaoAtivo : null),
           }}
         >
-          Confrontantes
+          <IconeConfrontantes />
         </button>
         {plantaUrl && (
-          <button type="button" style={styles.botao} onClick={() => abrirPdf(plantaUrl)}>
-            Planta
+          <button type="button" aria-label="Abrir planta" title="Planta" style={styles.botao} onClick={() => abrirPdf(plantaUrl)}>
+            <IconePlanta />
           </button>
         )}
         {memorialUrl && (
-          <button type="button" style={styles.botao} onClick={() => abrirPdf(memorialUrl)}>
-            Memorial
+          <button type="button" aria-label="Abrir memorial" title="Memorial" style={styles.botao} onClick={() => abrirPdf(memorialUrl)}>
+            <IconeMemorial />
           </button>
         )}
       </div>
@@ -240,12 +243,23 @@ function BarraDeAcoes({
   );
 }
 
+function IconeConfrontantes() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3" /><circle cx="17" cy="10" r="2.5" /><path d="M2.8 19c.8-3 2.7-4.5 5.2-4.5s4.4 1.5 5.2 4.5M14.3 19c.45-1.8 1.55-2.9 3.25-2.9 1.65 0 2.8 1.1 3.25 2.9" /></svg>;
+}
+
+function IconeMemorial() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3.5h8l4 4V20.5H6z" /><path d="M14 3.5v4h4M9 12h6M9 16h6" /></svg>;
+}
+
+function IconePlanta() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="m3.5 5.5 5-2 7 2.5 5-2v14.5l-5 2-7-2.5-5 2z" /><path d="M8.5 3.5V18M15.5 6v14.5" /></svg>;
+}
+
 const styles = {
   barra: {
     position: "absolute",
-    top: "50%",
-    right: 16,
-    transform: "translateY(-50%)",
+    top: "max(16px, env(safe-area-inset-top))",
+    right: "max(16px, env(safe-area-inset-right))",
     zIndex: 10,
     display: "flex",
     flexDirection: "column",
@@ -253,20 +267,22 @@ const styles = {
     alignItems: "flex-start",
   },
   botao: {
-    padding: "8px 14px",
-    borderRadius: 8,
-    border: "1px solid rgba(0,0,0,0.12)",
-    background: "rgba(255,255,255,0.92)",
-    color: "#2c3e2f",
-    fontWeight: 600,
-    fontSize: 13,
+    width: 44,
+    height: 44,
+    padding: 0,
+    borderRadius: "50%",
+    border: "1px solid rgba(15,23,42,0.14)",
+    background: "rgba(255,255,255,0.94)",
+    color: "#1f2937",
+    display: "grid",
+    placeItems: "center",
     cursor: "pointer",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    boxShadow: "0 3px 10px rgba(15,23,42,0.16)",
   },
   botaoAtivo: {
-    background: "#22c55e",
+    background: "#166534",
     color: "#ffffff",
-    borderColor: "#22c55e",
+    borderColor: "#166534",
   },
   aviso: {
     margin: 0,
