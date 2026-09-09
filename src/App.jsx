@@ -243,8 +243,9 @@ function BarraDeAcoes({
 const styles = {
   barra: {
     position: "absolute",
-    top: 16,
-    left: 16,
+    top: "50%",
+    right: 16,
+    transform: "translateY(-50%)",
     zIndex: 10,
     display: "flex",
     flexDirection: "column",
