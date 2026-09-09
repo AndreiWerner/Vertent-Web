@@ -181,14 +181,16 @@ function App() {
 
         <LoadingOverlay />
 
-        <BarraDeAcoes
-          modoConfrontantes={modoConfrontantes}
-          onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
-          mostrarAvisoSemDados={modoConfrontantes && !dadosProntos}
-          plantaUrl={dadosTerreno?.planta_url}
-          memorialUrl={dadosTerreno?.memorial_url}
-        />
       </ModelErrorBoundary>
+
+      {/* Os controles permanecem disponíveis mesmo se o Canvas/GLB falhar. */}
+      <BarraDeAcoes
+        modoConfrontantes={modoConfrontantes}
+        onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
+        mostrarAvisoSemDados={modoConfrontantes && !dadosProntos}
+        plantaUrl={dadosTerreno?.planta_url}
+        memorialUrl={dadosTerreno?.memorial_url}
+      />
     </div>
   );
 }

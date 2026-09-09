@@ -38,9 +38,9 @@ export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
   // (topotexture_origin_x/y/z -- ver export/gltf_exporter.py). O
   // GLTFLoader copia `extras` do glTF para `userData` automaticamente.
   // Terrenos gerados antes dessa funcionalidade existir (ou vindos de
-  // outra fonte) simplesmente não têm esse node -- `onTerrenoNode` é
-  // chamado com `null` e o modo Confrontantes fica indisponível pra
-  // esse terreno, sem quebrar nada (ETAPA 3, seção 11).
+  // outra fonte) não têm esse node. Nessa situação, a raiz do GLB é
+  // usada como referencial e a origem retornada pelo Backend é aplicada
+  // pela mesma fórmula matemática, mantendo suporte aos GLBs antigos.
   useEffect(() => {
     let encontrado = null;
     scene.traverse((child) => {
@@ -48,7 +48,7 @@ export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
         encontrado = child;
       }
     });
-    onTerrenoNode?.(encontrado);
+    onTerrenoNode?.(encontrado ?? scene);
   }, [scene, onTerrenoNode]);
 
   useEffect(() => {
@@ -57,12 +57,12 @@ export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
     const box = new Box3().setFromObject(scene);
     if (box.isEmpty()) return;
 
-    const size = box.getSize(new Vector3());
     const center = box.getCenter(new Vector3());
 
     // Centraliza o terreno no eixo X/Z e coloca a base dele em Y=0.
     // Isso evita que a rotação aconteça em torno de um ponto distante
     // do modelo e mantém o terreno alinhado com o fundo cartográfico.
+    // eslint-disable-next-line react-hooks/immutability -- Three.js scene graph
     scene.position.x -= center.x;
     scene.position.z -= center.z;
     scene.position.y -= box.min.y;
@@ -88,6 +88,7 @@ export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
       distance * 0.95
     );
 
+    // eslint-disable-next-line react-hooks/immutability -- imperative Three.js camera
     camera.near = Math.max(maxSize / 100000, 0.001);
     camera.far = Math.max(maxSize * 100, 1000);
     camera.updateProjectionMatrix();
@@ -98,6 +99,7 @@ export function Terrenos({ url, onTerrenoNode, modoConfrontantes }) {
         fittedCenter.y,
         fittedCenter.z
       );
+      // eslint-disable-next-line react-hooks/immutability -- OrbitControls API
       controls.minDistance = Math.max(maxSize * 0.08, 0.01);
       controls.maxDistance = Math.max(maxSize * 20, 1);
       controls.update();
