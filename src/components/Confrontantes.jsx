@@ -175,6 +175,8 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     const origin = origemDoModelo(terrenoNode, dados);
     if (!origin) return { perimetro: [], segmentos: [], divisores: [], escala: 1 };
     const pontosOrdenados = dados.pontos.map((ponto, indice) => ({ ...ponto, _ordem: valorDeOrdem(ponto, indice) })).sort((a, b) => a._ordem - b._ordem);
+    console.log("[DIAG] pontos ordenados:", pontosOrdenados.map((p) => ({ numero: p.numero, ordem: p._ordem, x: p.x, y: p.y })));
+    console.log("[DIAG] confrontantes completos:", JSON.stringify(dados.confrontantes));
     const porNumero = new Map(pontosOrdenados.map((ponto, indice) => [numeroPonto(ponto.numero), indice]));
     const malhas = obterMalhas(terrenoNode); const caixaLocal = obterCaixaLocal(terrenoNode, malhas); const anel = [];
     for (const ponto of pontosOrdenados) {
@@ -190,8 +192,10 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     const orientacao = areaAssinada(anel); const tamanhoTexto = Math.max(tamanhoTerreno / 70, 0.12); const rotulos = []; const verticesDeTransicao = new Map(); const lista = [];
     for (const confrontante of dados.confrontantes) {
       const inicio = porNumero.get(numeroPonto(confrontante.ponto_inicio)); const fim = porNumero.get(numeroPonto(confrontante.ponto_fim));
-      if (inicio === undefined || fim === undefined) continue;
-      const indices = indicesDoIntervalo(inicio, fim, anel.length); if (indices.length < 2) continue;
+      if (inicio === undefined || fim === undefined) { console.warn(`[DIAG] confrontante "${confrontante.nome}" ignorado: ponto_inicio=${confrontante.ponto_inicio} (índice ${inicio}) ou ponto_fim=${confrontante.ponto_fim} (índice ${fim}) não encontrado em pontosOrdenados.`); continue; }
+      const indices = indicesDoIntervalo(inicio, fim, anel.length);
+      console.log(`[DIAG] confrontante "${confrontante.nome}": inicio(numero)=${confrontante.ponto_inicio}->idx${inicio}, fim(numero)=${confrontante.ponto_fim}->idx${fim}, qtdIndices=${indices.length}`);
+      if (indices.length < 2) continue;
       const centro = centroDoTrecho(indices, anel); const externo = direcaoExterna(indices, anel, orientacao);
       const nome = confrontante.nome || "Confrontante"; const matricula = confrontante.matricula || "Não informada";
       const metricas = metricasDoTexto(nome, matricula, tamanhoTexto);
