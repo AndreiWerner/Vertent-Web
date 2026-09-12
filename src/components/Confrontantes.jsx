@@ -210,6 +210,10 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     }
     const caixa = new Box3().setFromPoints(anel); const tamanhoTerreno = Math.max(caixa.getSize(new Vector3()).x, caixa.getSize(new Vector3()).z, 1);
     const orientacao = areaAssinada(anel); const tamanhoTexto = Math.max(tamanhoTerreno / 70, 0.12); const rotulos = []; const verticesDeTransicao = new Map(); const lista = [];
+    // Realce da linha verde de cada divisa: um pouco acima do próprio anel
+    // (que já está ALTURA_ACIMA_DO_TERRENO sobre o terreno) para não
+    // sobrepor exatamente a linha preta do perímetro nem a malha.
+    const realceVerde = Math.max(tamanhoTerreno * 0.001, 0.05);
     for (const confrontante of dados.confrontantes) {
       const inicio = porNumero.get(numeroPonto(confrontante.ponto_inicio)); const fim = porNumero.get(numeroPonto(confrontante.ponto_fim));
       if (inicio === undefined || fim === undefined) { console.warn(`[DIAG] confrontante "${confrontante.nome}" ignorado: ponto_inicio=${confrontante.ponto_inicio} (índice ${inicio}) ou ponto_fim=${confrontante.ponto_fim} (índice ${fim}) não encontrado em pontosOrdenados.`); continue; }
@@ -221,7 +225,8 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
       const metricas = metricasDoTexto(nome, matricula, tamanhoTexto);
       const rotulo = posicaoDoRotulo(centro.ponto, externo, centro.comprimento, tamanhoTerreno, anel, rotulos, metricas); rotulo.y = centro.ponto.y + ALTURA_ACIMA_DO_TERRENO * 2; rotulos.push({ ponto: rotulo, raio: metricas.raio });
       verticesDeTransicao.set(indices[0], externo); verticesDeTransicao.set(indices[indices.length - 1], externo);
-      lista.push({ key: `${confrontante.ordem ?? ""}-${numeroPonto(confrontante.ponto_inicio)}-${numeroPonto(confrontante.ponto_fim)}`, nome, matricula, trecho: indices.map((indice) => anel[indice].toArray()), ancora: centro.ponto.toArray(), rotulo: rotulo.toArray(), pontaLinha: rotulo.clone().addScaledVector(externo, -metricas.raio).toArray() });
+      const ancora = centro.ponto.clone(); ancora.y += realceVerde;
+      lista.push({ key: `${confrontante.ordem ?? ""}-${numeroPonto(confrontante.ponto_inicio)}-${numeroPonto(confrontante.ponto_fim)}`, nome, matricula, trecho: indices.map((indice) => { const ponto = anel[indice].clone(); ponto.y += realceVerde; return ponto.toArray(); }), ancora: ancora.toArray(), rotulo: rotulo.toArray(), pontaLinha: rotulo.clone().addScaledVector(externo, -metricas.raio).toArray() });
     }
     const tamanhoDivisor = Math.max(tamanhoTerreno * 0.018, tamanhoTexto * 0.8);
     return { perimetro: [...anel, anel[0]].map((ponto) => ponto.toArray()), segmentos: lista, divisores: [...verticesDeTransicao].map(([indice, externo]) => { const vertice = anel[indice]; return [vertice.clone().addScaledVector(externo, -tamanhoDivisor).toArray(), vertice.clone().addScaledVector(externo, tamanhoDivisor).toArray()]; }), escala: tamanhoTexto };
@@ -238,7 +243,7 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
   return createPortal(<group name={NOME_OVERLAY} visible={visivel}>
     <Line points={perimetro} color="#111827" lineWidth={3} />
     {segmentos.map((segmento) => <group key={segmento.key}>
-      <Line points={segmento.trecho} color="#16a34a" lineWidth={3.5} />
+      <Line points={segmento.trecho} color="#16a34a" lineWidth={5} />
       <Line points={[segmento.ancora, segmento.pontaLinha]} color="#86efac" lineWidth={1.5} />
       <Text position={segmento.rotulo} rotation={[-Math.PI / 2, 0, 0]} fontSize={escala} color="#14532d" anchorX="center" anchorY="middle" outlineWidth={escala * 0.08} outlineColor="#ffffff">{`${segmento.nome}\nMatrícula: ${segmento.matricula}`}</Text>
     </group>)}
