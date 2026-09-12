@@ -17,9 +17,22 @@ function paraEspacoLocal(ponto, origin, altura) {
   return new Vector3(Number(ponto.x) - origin.x, altura, -(Number(ponto.y) - origin.y));
 }
 
+const NOME_OVERLAY = "vertent-confrontantes-overlay";
+
+function pertenceAoOverlay(objeto) {
+  let atual = objeto;
+  while (atual) { if (atual.name === NOME_OVERLAY) return true; atual = atual.parent; }
+  return false;
+}
+
 function obterMalhas(raiz) {
   const malhas = [];
-  raiz?.traverse((objeto) => { if (objeto.isMesh && objeto.geometry) malhas.push(objeto); });
+  // Exclui o próprio overlay de confrontantes (linhas/textos que nós
+  // desenhamos, reparentados dentro de "raiz" via createPortal). Sem isso,
+  // numa segunda passada as fat lines (LineSegments2, que também tem
+  // isMesh=true) entram na lista e o raycast contra elas quebra, porque
+  // exigem um Raycaster.camera que este raycast manual não define.
+  raiz?.traverse((objeto) => { if (objeto.isMesh && objeto.geometry && !pertenceAoOverlay(objeto)) malhas.push(objeto); });
   return malhas;
 }
 
@@ -198,7 +211,7 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
   // O portal e os recursos Three.js permanecem montados entre cliques.
   // O toggle muda somente a visibilidade, evitando disposal/remount de
   // Line/Text e sem tocar no GLB, Canvas ou câmera.
-  return createPortal(<group visible={visivel}>
+  return createPortal(<group name={NOME_OVERLAY} visible={visivel}>
     <Line points={perimetro} color="#111827" lineWidth={3} />
     {segmentos.map((segmento) => <group key={segmento.key}>
       <Line points={segmento.trecho} color="#16a34a" lineWidth={3.5} />
