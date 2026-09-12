@@ -144,7 +144,11 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     const malhas = obterMalhas(terrenoNode); const caixaLocal = obterCaixaLocal(terrenoNode, malhas); const anel = [];
     for (const ponto of pontosOrdenados) {
       const local = paraEspacoLocal(ponto, origin, 0); const altura = obterAlturaDoTerreno(terrenoNode, local, malhas, caixaLocal);
-      if (altura == null) { console.warn(`Ponto ${numeroPonto(ponto.numero)} não intercepta o terreno; divisa não desenhada.`); return { perimetro: [], segmentos: [], divisores: [], escala: 1 }; }
+      if (altura == null) {
+        console.warn(`Ponto ${numeroPonto(ponto.numero)} não intercepta o terreno; divisa não desenhada.`);
+        console.warn("[DIAGNÓSTICO] ponto local (x,z):", local.x, local.z, "| caixa da malha X:", caixaLocal.min.x, "a", caixaLocal.max.x, "| caixa da malha Z:", caixaLocal.min.z, "a", caixaLocal.max.z);
+        return { perimetro: [], segmentos: [], divisores: [], escala: 1 };
+      }
       local.y = altura; anel.push(local);
     }
     const caixa = new Box3().setFromPoints(anel); const tamanhoTerreno = Math.max(caixa.getSize(new Vector3()).x, caixa.getSize(new Vector3()).z, 1);
