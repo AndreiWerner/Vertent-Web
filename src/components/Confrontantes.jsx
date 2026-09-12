@@ -36,14 +36,36 @@ function obterCaixaLocal(raiz, malhas) {
   return caixa;
 }
 
-function obterAlturaDoTerreno(raiz, ponto, malhas, caixaLocal) {
-  if (!malhas.length || caixaLocal.isEmpty()) return null;
-  const origemLocal = ponto.clone();
-  origemLocal.y = caixaLocal.max.y + Math.max(caixaLocal.getSize(new Vector3()).y, 1);
+function obterAlturaEm(raiz, x, z, malhas, caixaLocal) {
+  const origemLocal = new Vector3(x, caixaLocal.max.y + Math.max(caixaLocal.getSize(new Vector3()).y, 1), z);
   const origemMundo = raiz.localToWorld(origemLocal);
   const direcaoMundo = new Vector3(0, -1, 0).transformDirection(raiz.matrixWorld);
   const hit = new Raycaster(origemMundo, direcaoMundo).intersectObjects(malhas, true)[0];
   return hit ? raiz.worldToLocal(hit.point.clone()).y + ALTURA_ACIMA_DO_TERRENO : null;
+}
+
+function obterAlturaDoTerreno(raiz, ponto, malhas, caixaLocal) {
+  if (!malhas.length || caixaLocal.isEmpty()) return null;
+  const direto = obterAlturaEm(raiz, ponto.x, ponto.z, malhas, caixaLocal);
+  if (direto != null) return direto;
+  // O ponto exato pode cair numa costura/lacuna de triangulação da malha
+  // (comum quando um vértice de fronteira fica bem em cima de uma emenda
+  // de triângulos). Antes de desistir do ponto, tenta vizinhos próximos
+  // em raios crescentes.
+  const raioBase = Math.max(caixaLocal.getSize(new Vector3()).length() * 0.005, 0.3);
+  for (const multiplicador of [1, 2, 4, 8, 16]) {
+    for (let i = 0; i < 8; i += 1) {
+      const angulo = (Math.PI * 2 * i) / 8;
+      const x = ponto.x + Math.cos(angulo) * raioBase * multiplicador;
+      const z = ponto.z + Math.sin(angulo) * raioBase * multiplicador;
+      const altura = obterAlturaEm(raiz, x, z, malhas, caixaLocal);
+      if (altura != null) {
+        console.warn(`Ponto fora de uma lacuna de triangulação; usando altura de um ponto vizinho a ${(raioBase * multiplicador).toFixed(2)}m.`);
+        return altura;
+      }
+    }
+  }
+  return null;
 }
 
 function areaAssinada(anel) {
