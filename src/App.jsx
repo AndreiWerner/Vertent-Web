@@ -94,12 +94,55 @@ function App() {
   // (ETAPA 3, seções 10 e 16): o GLB tem o node com o origin do Topo
   // Textura, o Backend respondeu com sucesso, e existe pelo menos um
   // confrontante cadastrado.
+  // Três causas DIFERENTES podem impedir os confrontantes de aparecer,
+  // e cada uma precisa de uma mensagem própria -- misturar todas numa
+  // só ("confrontante não cadastrado") é enganoso: um terreno pode ter
+  // confrontantes cadastrados e ainda assim não conseguir exibi-los
+  // (ex.: o .glb não tem a origem gravada pelo Topo Textura). Ver
+  // investigação: ARQUIVO/FUNÇÃO responsáveis pelo bug relatado.
+  const semDadosDoBackend = statusDados !== "ok";
+  const semOrigemDoGlb =
+    statusDados === "ok" &&
+    (dadosTerreno?.origin_x == null || dadosTerreno?.origin_y == null);
+  const semConfrontantesCadastrados =
+    statusDados === "ok" &&
+    dadosTerreno?.origin_x != null &&
+    dadosTerreno?.origin_y != null &&
+    (dadosTerreno?.confrontantes?.length ?? 0) === 0;
+
   const dadosProntos =
     statusDados === "ok" &&
     !!terrenoNode &&
     dadosTerreno?.origin_x != null &&
     dadosTerreno?.origin_y != null &&
     (dadosTerreno?.confrontantes?.length ?? 0) > 0;
+
+  // [LOG TEMPORÁRIO DE DIAGNÓSTICO] mostra exatamente qual das três
+  // causas está ativa quando o usuário abre o modo Confrontantes sem
+  // conseguir ver nada -- remover depois que o diagnóstico em campo
+  // confirmar a causa real.
+  useEffect(() => {
+    if (!modoConfrontantes) return;
+    console.log(
+      `[WEB] modo Confrontantes aberto -- statusDados=${statusDados} ` +
+        `semDadosDoBackend=${semDadosDoBackend} semOrigemDoGlb=${semOrigemDoGlb} ` +
+        `semConfrontantesCadastrados=${semConfrontantesCadastrados} dadosProntos=${dadosProntos}`
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoConfrontantes]);
+
+  function mensagemAvisoConfrontantes() {
+    if (semDadosDoBackend) {
+      return "Não foi possível carregar os dados deste terreno. Verifique sua conexão.";
+    }
+    if (semOrigemDoGlb) {
+      return "Este terreno ainda não tem a origem georreferenciada do modelo 3D -- os confrontantes não podem ser posicionados.";
+    }
+    if (semConfrontantesCadastrados) {
+      return "Não há confrontantes cadastrados para este terreno.";
+    }
+    return null;
+  }
 
   if (status.state === "missing") {
     return <StatusScreen title="Nenhum terreno foi informado." />;
@@ -187,7 +230,7 @@ function App() {
       <BarraDeAcoes
         modoConfrontantes={modoConfrontantes}
         onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
-        mostrarAvisoSemDados={modoConfrontantes && !dadosProntos}
+        avisoConfrontantes={modoConfrontantes ? mensagemAvisoConfrontantes() : null}
         plantaUrl={dadosTerreno?.planta_url}
         memorialUrl={dadosTerreno?.memorial_url}
       />
@@ -200,7 +243,7 @@ function App() {
 function BarraDeAcoes({
   modoConfrontantes,
   onToggleConfrontantes,
-  mostrarAvisoSemDados,
+  avisoConfrontantes,
   plantaUrl,
   memorialUrl,
 }) {
@@ -234,9 +277,9 @@ function BarraDeAcoes({
         )}
       </div>
 
-      {mostrarAvisoSemDados && (
+      {avisoConfrontantes && (
         <p style={styles.aviso}>
-          Não há dados de confrontantes cadastrados para este terreno.
+          {avisoConfrontantes}
         </p>
       )}
     </div>

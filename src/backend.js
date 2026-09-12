@@ -28,7 +28,25 @@ export async function buscarTerrenoPublico(matricula) {
       return null;
     }
 
-    return await resposta.json();
+    const dados = await resposta.json();
+
+    // [LOG TEMPORÁRIO DE DIAGNÓSTICO] Investigação: confrontantes
+    // cadastrados no Admin não aparecem no app/Web. Sem CPF/senha/
+    // token -- só contagens e a estrutura do primeiro confrontante.
+    // Remover depois que o diagnóstico for confirmado em produção.
+    console.log(
+      `[WEB] parâmetro matrícula recebido: ${matricula}`
+    );
+    console.log(
+      `[WEB] resposta de /terreno-publico -- origin_x=${dados?.origin_x} origin_y=${dados?.origin_y} ` +
+        `pontos=${Array.isArray(dados?.pontos) ? dados.pontos.length : typeof dados?.pontos} ` +
+        `confrontantes=${Array.isArray(dados?.confrontantes) ? dados.confrontantes.length : typeof dados?.confrontantes}`
+    );
+    if (Array.isArray(dados?.confrontantes) && dados.confrontantes[0]) {
+      console.log(`[WEB] estrutura do primeiro confrontante: ${JSON.stringify(dados.confrontantes[0])}`);
+    }
+
+    return dados;
   } catch (err) {
     console.error("Falha ao buscar dados do terreno no Backend:", err);
     return null;
