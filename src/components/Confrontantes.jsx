@@ -26,14 +26,34 @@ function pertenceAoOverlay(objeto) {
 }
 
 function obterMalhas(raiz) {
-  const malhas = [];
+  const candidatas = [];
   // Exclui o próprio overlay de confrontantes (linhas/textos que nós
   // desenhamos, reparentados dentro de "raiz" via createPortal). Sem isso,
   // numa segunda passada as fat lines (LineSegments2, que também tem
   // isMesh=true) entram na lista e o raycast contra elas quebra, porque
   // exigem um Raycaster.camera que este raycast manual não define.
-  raiz?.traverse((objeto) => { if (objeto.isMesh && objeto.geometry && !pertenceAoOverlay(objeto)) malhas.push(objeto); });
-  return malhas;
+  raiz?.traverse((objeto) => { if (objeto.isMesh && objeto.geometry && !pertenceAoOverlay(objeto)) candidatas.push(objeto); });
+  if (candidatas.length <= 1) return candidatas;
+  // O GLB do Topo Textura pode trazer, junto da malha real do terreno,
+  // marcadores decorativos (setas de amarração, ícones de cota mínima/
+  // máxima etc. vistos na planta impressa). Eles também são "isMesh" e, se
+  // entrarem no raycast, podem dar a altura de um ícone em vez da altura
+  // real do terreno num ponto da divisa. Mantém só malhas cuja "pegada"
+  // (área no plano X/Z) é relevante perto da maior malha encontrada --
+  // um marcador é sempre muito menor que o terreno de verdade.
+  raiz.updateWorldMatrix(true, true);
+  const inversaDaRaiz = new Matrix4().copy(raiz.matrixWorld).invert();
+  const areas = candidatas.map((malha) => {
+    malha.geometry.computeBoundingBox();
+    if (!malha.geometry.boundingBox) return 0;
+    const matrizLocal = new Matrix4().multiplyMatrices(inversaDaRaiz, malha.matrixWorld);
+    const tamanho = malha.geometry.boundingBox.clone().applyMatrix4(matrizLocal).getSize(new Vector3());
+    return tamanho.x * tamanho.z;
+  });
+  const areaMaxima = Math.max(...areas);
+  const resultado = candidatas.filter((_, indice) => areas[indice] >= areaMaxima * 0.05);
+  console.log("[DIAG] malhas dentro do terreno:", candidatas.map((m, i) => ({ nome: m.name || "(sem nome)", areaXZ: areas[i].toFixed(2), mantida: areas[i] >= areaMaxima * 0.05 })));
+  return resultado;
 }
 
 function obterCaixaLocal(raiz, malhas) {
@@ -219,7 +239,7 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     <Line points={perimetro} color="#111827" lineWidth={3} />
     {segmentos.map((segmento) => <group key={segmento.key}>
       <Line points={segmento.trecho} color="#16a34a" lineWidth={3.5} />
-      <Line points={[segmento.ancora, segmento.pontaLinha]} color="#14532d" lineWidth={1.5} />
+      <Line points={[segmento.ancora, segmento.pontaLinha]} color="#86efac" lineWidth={1.5} />
       <Text position={segmento.rotulo} rotation={[-Math.PI / 2, 0, 0]} fontSize={escala} color="#14532d" anchorX="center" anchorY="middle" outlineWidth={escala * 0.08} outlineColor="#ffffff">{`${segmento.nome}\nMatrícula: ${segmento.matricula}`}</Text>
     </group>)}
     {divisores.map((pontos, indice) => <Line key={`divisor-${indice}`} points={pontos} color="#0f172a" lineWidth={2} />)}
