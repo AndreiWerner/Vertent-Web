@@ -165,6 +165,10 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
   })();
 
   if (!terrenoNode) return null;
+  // Sem perímetro válido (qualquer uma das saídas antecipadas acima),
+  // não há nada para desenhar. Sem esse guard, <Line points={[]}/>
+  // faz o drei tentar montar um Float32Array de tamanho negativo.
+  if (perimetro.length < 2) return null;
   // O portal e os recursos Three.js permanecem montados entre cliques.
   // O toggle muda somente a visibilidade, evitando disposal/remount de
   // Line/Text e sem tocar no GLB, Canvas ou câmera.
