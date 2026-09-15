@@ -199,14 +199,37 @@ export function Confrontantes({ terrenoNode, dados, visivel }) {
     console.log("[DIAG] confrontantes completos:", JSON.stringify(dados.confrontantes));
     const porNumero = new Map(pontosOrdenados.map((ponto, indice) => [numeroPonto(ponto.numero), indice]));
     const malhas = obterMalhas(terrenoNode); const caixaLocal = obterCaixaLocal(terrenoNode, malhas); const anel = [];
+    // Índices (dentro de "anel") de vértices cuja altura não foi
+    // encontrada na malha nem nos vizinhos próximos (ver
+    // obterAlturaDoTerreno). Antes, um único vértice nessa situação
+    // fazia a função desistir e devolver tudo vazio -- nenhuma divisa
+    // era desenhada, mesmo com os outros vértices corretos. Agora o
+    // X/Z de cada vértice (que vem direto do memorial) é sempre
+    // respeitado; só a altura de um vértice problemático é estimada
+    // depois, a partir de um vizinho válido NA PRÓPRIA DIVISA.
+    const semAltura = [];
     for (const ponto of pontosOrdenados) {
       const local = paraEspacoLocal(ponto, origin, 0); const altura = obterAlturaDoTerreno(terrenoNode, local, malhas, caixaLocal);
       if (altura == null) {
-        console.warn(`Ponto ${numeroPonto(ponto.numero)} não intercepta o terreno; divisa não desenhada.`);
+        console.warn(`Ponto ${numeroPonto(ponto.numero)} não intercepta o terreno (nem nos arredores); a altura desse vértice será estimada por um vizinho da divisa.`);
         console.warn("[DIAGNÓSTICO] ponto local (x,z):", local.x, local.z, "| caixa da malha X:", caixaLocal.min.x, "a", caixaLocal.max.x, "| caixa da malha Z:", caixaLocal.min.z, "a", caixaLocal.max.z);
-        return { perimetro: [], segmentos: [], divisores: [], escala: 1 };
+        semAltura.push(anel.length);
       }
       local.y = altura; anel.push(local);
+    }
+    // Sem NENHUM vértice com altura resolvida não há de onde estimar
+    // nada -- aí sim não há o que desenhar (mesmo comportamento de
+    // antes para esse caso extremo, ex.: origem do GLB toda errada).
+    if (semAltura.length === anel.length) return { perimetro: [], segmentos: [], divisores: [], escala: 1 };
+    for (const indice of semAltura) {
+      let vizinho = null;
+      for (let distancia = 1; vizinho == null && distancia < anel.length; distancia += 1) {
+        const antes = anel[(indice - distancia + anel.length) % anel.length];
+        const depois = anel[(indice + distancia) % anel.length];
+        vizinho = antes.y ?? depois.y ?? null;
+      }
+      anel[indice].y = vizinho ?? 0;
+      console.warn(`Ponto ${numeroPonto(pontosOrdenados[indice].numero)}: altura estimada em ${anel[indice].y.toFixed(2)}m a partir de um vizinho da divisa -- NÃO é a altura real do terreno nesse vértice. Verifique a coordenada desse ponto no cadastro/memorial.`);
     }
     const caixa = new Box3().setFromPoints(anel); const tamanhoTerreno = Math.max(caixa.getSize(new Vector3()).x, caixa.getSize(new Vector3()).z, 1);
     const orientacao = areaAssinada(anel); const tamanhoTexto = Math.max(tamanhoTerreno / 70, 0.12); const rotulos = []; const verticesDeTransicao = new Map(); const lista = [];
