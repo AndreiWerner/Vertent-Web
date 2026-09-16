@@ -247,7 +247,18 @@ function BarraDeAcoes({
   plantaUrl,
   memorialUrl,
 }) {
-  const abrirPdf = (url) => window.open(url, "_blank", "noopener,noreferrer");
+  // Abrir a URL crua do PDF direto faz o navegador/WebView baixar o
+  // arquivo em vez de exibir -- nem todo WebView (e nem todo Chrome
+  // mobile, dependendo da configuração) tem visualizador de PDF
+  // embutido para uma navegação direta a um arquivo .pdf. O
+  // visualizador do Google contorna isso: é uma página HTML comum que
+  // busca e renderiza o PDF sozinha, então a navegação é sempre para
+  // uma página, nunca para o arquivo em si -- exibe em vez de baixar,
+  // com zoom e paginação prontos, em qualquer navegador/WebView.
+  const abrirPdf = (url) => {
+    const visualizador = `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+    window.open(visualizador, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div style={styles.barra}>
