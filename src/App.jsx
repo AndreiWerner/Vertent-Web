@@ -68,6 +68,42 @@ function App() {
   const [statusDados, setStatusDados] = useState(
     status.matricula ? "carregando" : "sem-matricula"
   );
+  // PDF (Planta/Memorial) exibido dentro do próprio app, num overlay
+  // de tela cheia -- ver VisualizadorPdf mais abaixo. Trocamos a
+  // tentativa anterior de abrir em nova aba (window.open) porque, ao
+  // depender de um fetch assíncrono antes de abrir a aba, vários
+  // navegadores bloqueiam isso como pop-up (a aba nunca chega a
+  // abrir, e por isso nem baixava nem exibia nada).
+  const [pdfAtivo, setPdfAtivo] = useState(null); // { titulo, blobUrl } | null
+
+  const abrirPdf = async (url, titulo) => {
+    if (!url) return;
+
+    try {
+      const resposta = await fetch(url);
+      if (!resposta.ok) {
+        throw new Error(`Falha ao buscar o PDF (${resposta.status})`);
+      }
+
+      // Busca como Blob em vez de navegar direto pra URL: alguns
+      // arquivos no Supabase Storage estão com o cabeçalho
+      // Content-Disposition: attachment, que força download -- isso
+      // vem do storage, não do app. Abrindo como Blob local a gente
+      // contorna esse cabeçalho sem precisar mexer no Supabase.
+      const blob = await resposta.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setPdfAtivo({ titulo, blobUrl });
+    } catch (err) {
+      console.error("Falha ao abrir PDF:", err);
+    }
+  };
+
+  const fecharPdf = () => {
+    if (pdfAtivo?.blobUrl) {
+      URL.revokeObjectURL(pdfAtivo.blobUrl);
+    }
+    setPdfAtivo(null);
+  };
 
   useEffect(() => {
     if (status.state !== "ready" || !status.matricula) return;
@@ -233,9 +269,43 @@ function App() {
         avisoConfrontantes={modoConfrontantes ? mensagemAvisoConfrontantes() : null}
         plantaUrl={dadosTerreno?.planta_url}
         memorialUrl={dadosTerreno?.memorial_url}
+        onAbrirPlanta={() => abrirPdf(dadosTerreno?.planta_url, "Planta")}
+        onAbrirMemorial={() => abrirPdf(dadosTerreno?.memorial_url, "Memorial")}
       />
+
+      {pdfAtivo && (
+        <VisualizadorPdf
+          titulo={pdfAtivo.titulo}
+          url={pdfAtivo.blobUrl}
+          onVoltar={fecharPdf}
+        />
+      )}
     </div>
   );
+}
+
+// Overlay de tela cheia com o PDF (Planta/Memorial) exibido dentro do
+// próprio app -- zoom e navegação de páginas ficam por conta do
+// visualizador nativo do navegador dentro do iframe (mesmo
+// comportamento que já existia antes). O único controle próprio daqui
+// é o botão "Voltar".
+function VisualizadorPdf({ titulo, url, onVoltar }) {
+  return (
+    <div style={styles.pdfOverlay}>
+      <div style={styles.pdfBarra}>
+        <button type="button" onClick={onVoltar} style={styles.pdfBotaoVoltar}>
+          <IconeVoltar />
+          Voltar
+        </button>
+        <span style={styles.pdfTitulo}>{titulo}</span>
+      </div>
+      <iframe title={titulo} src={url} style={styles.pdfIframe} />
+    </div>
+  );
+}
+
+function IconeVoltar() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>;
 }
 
 // [ Confrontantes ] [ Planta ] [ Memorial ] -- ETAPA 3, seção 14. Só
@@ -246,50 +316,9 @@ function BarraDeAcoes({
   avisoConfrontantes,
   plantaUrl,
   memorialUrl,
+  onAbrirPlanta,
+  onAbrirMemorial,
 }) {
-  // Abre o PDF via Blob local em vez de navegar direto pra URL do
-  // Supabase: alguns arquivos lá estão com o cabeçalho
-  // Content-Disposition: attachment, que força o navegador a baixar
-  // em vez de exibir -- isso vem do storage, não do app, então não
-  // dá pra "consertar" só navegando pra URL de outro jeito. Buscando
-  // o PDF e abrindo como Blob a gente contorna esse cabeçalho sem
-  // mexer no Supabase.
-  // A janela precisa ser aberta de forma síncrona (dentro do próprio
-  // clique) pra não ser bloqueada como pop-up -- por isso abre em
-  // branco primeiro e só troca o location depois que o Blob estiver
-  // pronto. Sem "noopener" aqui: com ele o navegador não devolve a
-  // referência da janela, e sem a referência não dá pra definir o
-  // location mais tarde.
-  const abrirPdf = async (url) => {
-    const janela = window.open();
-
-    try {
-      const resposta = await fetch(url);
-      if (!resposta.ok) {
-        throw new Error(`Falha ao buscar o PDF (${resposta.status})`);
-      }
-
-      const blob = await resposta.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      if (janela) {
-        janela.location.href = blobUrl;
-      }
-
-      // Revoga o Blob depois de um tempo -- só depois que o navegador
-      // já teve chance de carregar o PDF na aba aberta.
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    } catch (err) {
-      console.error("Falha ao abrir PDF via Blob, usando a URL original:", err);
-      // Se o fetch falhar (ex.: CORS), pelo menos tenta abrir a URL
-      // original na aba já aberta -- pode forçar download nesse caso,
-      // mas é melhor que uma aba em branco.
-      if (janela) {
-        janela.location.href = url;
-      }
-    }
-  };
-
   return (
     <div style={styles.barra}>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -307,12 +336,12 @@ function BarraDeAcoes({
           <IconeConfrontantes />
         </button>
         {plantaUrl && (
-          <button type="button" aria-label="Abrir planta" title="Planta" style={styles.botao} onClick={() => abrirPdf(plantaUrl)}>
+          <button type="button" aria-label="Abrir planta" title="Planta" style={styles.botao} onClick={onAbrirPlanta}>
             <IconePlanta />
           </button>
         )}
         {memorialUrl && (
-          <button type="button" aria-label="Abrir memorial" title="Memorial" style={styles.botao} onClick={() => abrirPdf(memorialUrl)}>
+          <button type="button" aria-label="Abrir memorial" title="Memorial" style={styles.botao} onClick={onAbrirMemorial}>
             <IconeMemorial />
           </button>
         )}
@@ -378,6 +407,46 @@ const styles = {
     fontSize: 12,
     maxWidth: 260,
     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  pdfOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 20,
+    background: "#ffffff",
+    display: "flex",
+    flexDirection: "column",
+  },
+  pdfBarra: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "10px 14px",
+    paddingTop: "max(10px, env(safe-area-inset-top))",
+    borderBottom: "1px solid rgba(15,23,42,0.12)",
+    background: "#ffffff",
+    flexShrink: 0,
+  },
+  pdfBotaoVoltar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "1px solid rgba(15,23,42,0.14)",
+    background: "rgba(255,255,255,0.94)",
+    color: "#1f2937",
+    fontSize: 14,
+    cursor: "pointer",
+  },
+  pdfTitulo: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#2c3e2f",
+  },
+  pdfIframe: {
+    flex: 1,
+    width: "100%",
+    border: "none",
   },
   loadingOverlay: {
     position: "absolute",
