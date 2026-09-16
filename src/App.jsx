@@ -247,7 +247,48 @@ function BarraDeAcoes({
   plantaUrl,
   memorialUrl,
 }) {
-  const abrirPdf = (url) => window.open(url, "_blank", "noopener,noreferrer");
+  // Abre o PDF via Blob local em vez de navegar direto pra URL do
+  // Supabase: alguns arquivos lá estão com o cabeçalho
+  // Content-Disposition: attachment, que força o navegador a baixar
+  // em vez de exibir -- isso vem do storage, não do app, então não
+  // dá pra "consertar" só navegando pra URL de outro jeito. Buscando
+  // o PDF e abrindo como Blob a gente contorna esse cabeçalho sem
+  // mexer no Supabase.
+  // A janela precisa ser aberta de forma síncrona (dentro do próprio
+  // clique) pra não ser bloqueada como pop-up -- por isso abre em
+  // branco primeiro e só troca o location depois que o Blob estiver
+  // pronto. Sem "noopener" aqui: com ele o navegador não devolve a
+  // referência da janela, e sem a referência não dá pra definir o
+  // location mais tarde.
+  const abrirPdf = async (url) => {
+    const janela = window.open();
+
+    try {
+      const resposta = await fetch(url);
+      if (!resposta.ok) {
+        throw new Error(`Falha ao buscar o PDF (${resposta.status})`);
+      }
+
+      const blob = await resposta.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      if (janela) {
+        janela.location.href = blobUrl;
+      }
+
+      // Revoga o Blob depois de um tempo -- só depois que o navegador
+      // já teve chance de carregar o PDF na aba aberta.
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (err) {
+      console.error("Falha ao abrir PDF via Blob, usando a URL original:", err);
+      // Se o fetch falhar (ex.: CORS), pelo menos tenta abrir a URL
+      // original na aba já aberta -- pode forçar download nesse caso,
+      // mas é melhor que uma aba em branco.
+      if (janela) {
+        janela.location.href = url;
+      }
+    }
+  };
 
   return (
     <div style={styles.barra}>
