@@ -5,6 +5,7 @@ import { Terrenos } from "./components/Terrenos";
 import { Confrontantes } from "./components/Confrontantes";
 import { StatusScreen } from "./components/StatusScreen";
 import { ModelErrorBoundary } from "./components/ModelErrorBoundary";
+import { VisualizadorPdf } from "./components/VisualizadorPdf";
 import { cartographicBackground } from "./theme";
 import { buscarTerrenoPublico } from "./backend";
 
@@ -68,42 +69,19 @@ function App() {
   const [statusDados, setStatusDados] = useState(
     status.matricula ? "carregando" : "sem-matricula"
   );
-  // PDF (Planta/Memorial) exibido dentro do próprio app, num overlay
-  // de tela cheia -- ver VisualizadorPdf mais abaixo. Trocamos a
-  // tentativa anterior de abrir em nova aba (window.open) porque, ao
-  // depender de um fetch assíncrono antes de abrir a aba, vários
-  // navegadores bloqueiam isso como pop-up (a aba nunca chega a
-  // abrir, e por isso nem baixava nem exibia nada).
-  const [pdfAtivo, setPdfAtivo] = useState(null); // { titulo, blobUrl } | null
+  // PDF (Planta/Memorial) exibido dentro do próprio app, numa tela
+  // interna de tela cheia -- ver components/VisualizadorPdf.jsx. Aqui
+  // guardamos apenas qual documento está aberto; TODO o carregamento
+  // (download, decodificação, loading, erro) é responsabilidade do
+  // visualizador, pra que nenhuma falha resulte em tela branca.
+  const [pdfAtivo, setPdfAtivo] = useState(null); // { titulo, url } | null
 
-  const abrirPdf = async (url, titulo) => {
+  const abrirPdf = (url, titulo) => {
     if (!url) return;
-
-    try {
-      const resposta = await fetch(url);
-      if (!resposta.ok) {
-        throw new Error(`Falha ao buscar o PDF (${resposta.status})`);
-      }
-
-      // Busca como Blob em vez de navegar direto pra URL: alguns
-      // arquivos no Supabase Storage estão com o cabeçalho
-      // Content-Disposition: attachment, que força download -- isso
-      // vem do storage, não do app. Abrindo como Blob local a gente
-      // contorna esse cabeçalho sem precisar mexer no Supabase.
-      const blob = await resposta.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      setPdfAtivo({ titulo, blobUrl });
-    } catch (err) {
-      console.error("Falha ao abrir PDF:", err);
-    }
+    setPdfAtivo({ titulo, url });
   };
 
-  const fecharPdf = () => {
-    if (pdfAtivo?.blobUrl) {
-      URL.revokeObjectURL(pdfAtivo.blobUrl);
-    }
-    setPdfAtivo(null);
-  };
+  const fecharPdf = () => setPdfAtivo(null);
 
   useEffect(() => {
     if (status.state !== "ready" || !status.matricula) return;
@@ -276,36 +254,12 @@ function App() {
       {pdfAtivo && (
         <VisualizadorPdf
           titulo={pdfAtivo.titulo}
-          url={pdfAtivo.blobUrl}
+          url={pdfAtivo.url}
           onVoltar={fecharPdf}
         />
       )}
     </div>
   );
-}
-
-// Overlay de tela cheia com o PDF (Planta/Memorial) exibido dentro do
-// próprio app -- zoom e navegação de páginas ficam por conta do
-// visualizador nativo do navegador dentro do iframe (mesmo
-// comportamento que já existia antes). O único controle próprio daqui
-// é o botão "Voltar".
-function VisualizadorPdf({ titulo, url, onVoltar }) {
-  return (
-    <div style={styles.pdfOverlay}>
-      <div style={styles.pdfBarra}>
-        <button type="button" onClick={onVoltar} style={styles.pdfBotaoVoltar}>
-          <IconeVoltar />
-          Voltar
-        </button>
-        <span style={styles.pdfTitulo}>{titulo}</span>
-      </div>
-      <iframe title={titulo} src={url} style={styles.pdfIframe} />
-    </div>
-  );
-}
-
-function IconeVoltar() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>;
 }
 
 // [ Confrontantes ] [ Planta ] [ Memorial ] -- ETAPA 3, seção 14. Só
@@ -407,46 +361,6 @@ const styles = {
     fontSize: 12,
     maxWidth: 260,
     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-  },
-  pdfOverlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 20,
-    background: "#ffffff",
-    display: "flex",
-    flexDirection: "column",
-  },
-  pdfBarra: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 14px",
-    paddingTop: "max(10px, env(safe-area-inset-top))",
-    borderBottom: "1px solid rgba(15,23,42,0.12)",
-    background: "#ffffff",
-    flexShrink: 0,
-  },
-  pdfBotaoVoltar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid rgba(15,23,42,0.14)",
-    background: "rgba(255,255,255,0.94)",
-    color: "#1f2937",
-    fontSize: 14,
-    cursor: "pointer",
-  },
-  pdfTitulo: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: "#2c3e2f",
-  },
-  pdfIframe: {
-    flex: 1,
-    width: "100%",
-    border: "none",
   },
   loadingOverlay: {
     position: "absolute",
