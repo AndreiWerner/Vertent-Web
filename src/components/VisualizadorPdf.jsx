@@ -734,17 +734,26 @@ const estilos = {
     flexShrink: 0,
   },
   botaoVoltar: {
+    // Fundo verde sólido de propósito: um botão branco-sobre-branco na
+    // barra de topo (também branca) fica com contraste baixo demais em
+    // alguns celulares/condições de luz e pode passar despercebido -- foi
+    // o que aconteceu no relato de "não tem botão de voltar" mesmo com o
+    // botão presente no código. Cor forte + sombra tornam o "Voltar"
+    // impossível de confundir com o resto da tela.
     display: "flex",
     alignItems: "center",
     gap: 6,
-    padding: "8px 12px",
+    padding: "10px 16px",
+    minHeight: 40,
     borderRadius: 8,
-    border: "1px solid rgba(15,23,42,0.14)",
-    background: "#ffffff",
-    color: "#1f2937",
+    border: "none",
+    background: "#166534",
+    color: "#ffffff",
     fontSize: 14,
+    fontWeight: 600,
     cursor: "pointer",
     flexShrink: 0,
+    boxShadow: "0 1px 3px rgba(15,23,42,0.25)",
   },
   titulo: {
     fontSize: 14,
