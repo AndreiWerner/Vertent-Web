@@ -1,8 +1,13 @@
+/* Antes: max-width/margin auto/padding/text-align do template padrão
+   do Vite (pensado pra centralizar um cartão de demonstração). Esse
+   padding de 2rem, somado ao body centralizando o #root (ver
+   index.css), era a causa raiz do botão "Voltar" do Planta/Memorial
+   ficando cortado/fora da área visível no celular: o conteúdo (100vw
+   x 100vh + padding) ficava maior que a tela e era recentralizado,
+   empurrando a barra de topo para fora. O Vertent-Web é tela cheia,
+   então o #root só precisa preencher 100% da viewport. */
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  height: 100%;
 }
 
 .logo {

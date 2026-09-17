@@ -80,9 +80,28 @@ function App() {
   // history.back() por engano se o popstate disparar por outro motivo.
   const historicoDocumentoRef = useRef(false);
 
+  // Avisa o app mobile (terreno-app) quando um documento abre/fecha.
+  // O painel nativo "Informações Técnicas" (Área/Perímetro/Altura) e o
+  // cabeçalho com a matrícula NÃO existem aqui no Vertent-Web -- são
+  // Views do React Native desenhadas por CIMA desta WebView em
+  // app/terreno.tsx, então nenhuma classe/CSS/z-index daqui consegue
+  // escondê-los. `window.ReactNativeWebView.postMessage` é a única
+  // ponte entre os dois; em qualquer outro ambiente (navegador comum,
+  // preview desktop) esse objeto não existe e a chamada é só ignorada.
+  const avisarAppNativo = (documentoAberto) => {
+    try {
+      window.ReactNativeWebView?.postMessage(
+        JSON.stringify({ tipo: "vertent-documento", aberto: documentoAberto })
+      );
+    } catch {
+      // Sem WebView nativa (desktop/preview) -- nada a fazer.
+    }
+  };
+
   const abrirPdf = (url, titulo) => {
     if (!url) return;
     setPdfAtivo({ titulo, url });
+    avisarAppNativo(true);
     // Empilha uma entrada de histórico só para o documento. Assim, o
     // botão/gesto físico de "voltar" do Android -- que no WebView do
     // app mobile normalmente navegaria para fora da página ou fecharia
@@ -93,6 +112,7 @@ function App() {
   };
 
   const fecharPdf = () => {
+    avisarAppNativo(false);
     if (historicoDocumentoRef.current) {
       // Consome a entrada que empilhamos; o listener de popstate abaixo
       // é quem efetivamente fecha a tela (setPdfAtivo(null)) quando o
@@ -109,7 +129,10 @@ function App() {
   useEffect(() => {
     const aoNavegarParaTras = () => {
       historicoDocumentoRef.current = false;
-      setPdfAtivo((atual) => (atual ? null : atual));
+      setPdfAtivo((atual) => {
+        if (atual) avisarAppNativo(false);
+        return atual ? null : atual;
+      });
     };
     window.addEventListener("popstate", aoNavegarParaTras);
     return () => window.removeEventListener("popstate", aoNavegarParaTras);
@@ -272,16 +295,20 @@ function App() {
 
       </ModelErrorBoundary>
 
-      {/* Os controles permanecem disponíveis mesmo se o Canvas/GLB falhar. */}
-      <BarraDeAcoes
-        modoConfrontantes={modoConfrontantes}
-        onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
-        avisoConfrontantes={modoConfrontantes ? mensagemAvisoConfrontantes() : null}
-        plantaUrl={dadosTerreno?.planta_url}
-        memorialUrl={dadosTerreno?.memorial_url}
-        onAbrirPlanta={() => abrirPdf(dadosTerreno?.planta_url, "Planta")}
-        onAbrirMemorial={() => abrirPdf(dadosTerreno?.memorial_url, "Memorial")}
-      />
+      {/* Os controles permanecem disponíveis mesmo se o Canvas/GLB falhar --
+          mas somem enquanto um documento (Planta/Memorial) está aberto,
+          pra que o VisualizadorPdf seja a única camada ativa na tela. */}
+      {!pdfAtivo && (
+        <BarraDeAcoes
+          modoConfrontantes={modoConfrontantes}
+          onToggleConfrontantes={() => setModoConfrontantes((v) => !v)}
+          avisoConfrontantes={modoConfrontantes ? mensagemAvisoConfrontantes() : null}
+          plantaUrl={dadosTerreno?.planta_url}
+          memorialUrl={dadosTerreno?.memorial_url}
+          onAbrirPlanta={() => abrirPdf(dadosTerreno?.planta_url, "Planta")}
+          onAbrirMemorial={() => abrirPdf(dadosTerreno?.memorial_url, "Memorial")}
+        />
+      )}
 
       {pdfAtivo && (
         <VisualizadorPdf

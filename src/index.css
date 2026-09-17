@@ -22,12 +22,19 @@ a:hover {
   color: #535bf2;
 }
 
+/* O Vertent-Web é um visualizador 3D em tela cheia (não o cartão
+   centralizado do template padrão do Vite). "display:flex;
+   place-items:center;min-height:100vh" nesta regra fazia o body
+   CENTRALIZAR verticalmente o #root -- e como o #root (ver App.css)
+   ainda tinha padding/max-width do template, o conteúdo ficava mais
+   alto que a viewport e o topo (barra "Voltar" do Planta/Memorial)
+   era empurrado para fora da área visível. html/body/#root agora só
+   preenchem 100% da tela, sem centralizar nem recortar nada. */
+html,
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 h1 {
