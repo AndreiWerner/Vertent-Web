@@ -110,6 +110,37 @@ function limitarZoom(valor) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, valor));
 }
 
+/**
+ * Olha os primeiros bytes do arquivo baixado para saber se é mesmo um PDF.
+ *
+ * Erro "Invalid PDF structure" quase nunca é PDF corrompido: normalmente o
+ * link devolveu OUTRA COISA (página de erro HTML, JSON do Storage, .docx...).
+ * Saber o que veio é o que permite dar uma mensagem útil em vez de genérica.
+ */
+function analisarArquivo(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let texto = "";
+  for (let i = 0; i < Math.min(bytes.length, 8192); i += 1) {
+    texto += String.fromCharCode(bytes[i]);
+  }
+
+  // Alguns arquivos chegam com BOM ou lixo antes do cabeçalho; se o "%PDF-"
+  // existir logo no início do arquivo, dá pra aproveitar a partir dali.
+  const posicao = texto.indexOf("%PDF-");
+  if (posicao === 0) return { ehPdf: true, deslocamento: 0, rotulo: "PDF", previa: "" };
+  if (posicao > 0) return { ehPdf: true, deslocamento: posicao, rotulo: "PDF", previa: "" };
+
+  const inicio = texto.slice(0, 120).trim();
+  let rotulo = "arquivo desconhecido";
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) rotulo = "arquivo ZIP/Word (.docx)";
+  else if (/^<(!doctype|html|\?xml)/i.test(inicio)) rotulo = "página HTML";
+  else if (/^[[{]/.test(inicio)) rotulo = "resposta JSON";
+  else if (bytes[0] === 0xff && bytes[1] === 0xd8) rotulo = "imagem JPEG";
+  else if (bytes[0] === 0x89 && bytes[1] === 0x50) rotulo = "imagem PNG";
+
+  return { ehPdf: false, deslocamento: 0, rotulo, previa: inicio };
+}
+
 function distanciaEntreToques(toques) {
   const dx = toques[0].clientX - toques[1].clientX;
   const dy = toques[0].clientY - toques[1].clientY;
@@ -174,12 +205,42 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
       //    depender de range requests e de uma segunda rodada de CORS dentro
       //    do worker -- pontos onde o WebView costuma falhar.
       let dados = null;
+      let diagnostico = null;
       try {
         const resposta = await fetch(url, { credentials: "omit" });
-        if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+        console.log(
+          `[PDF] ${titulo}: HTTP ${resposta.status} tipo=${resposta.headers.get("content-type")} ` +
+            `tamanho=${resposta.headers.get("content-length")}`
+        );
+        if (!resposta.ok) {
+          diagnostico =
+            resposta.status === 404
+              ? "O link deste documento não existe mais no servidor (erro 404)."
+              : `O servidor respondeu com erro ${resposta.status} ao buscar o arquivo.`;
+          throw new Error(`HTTP ${resposta.status}`);
+        }
         dados = await resposta.arrayBuffer();
+
+        const analise = analisarArquivo(dados);
+        if (!analise.ehPdf) {
+          console.error(
+            `[PDF] ${titulo}: o link não devolveu um PDF, e sim ${analise.rotulo}. ` +
+              `Início do conteúdo: ${analise.previa}`
+          );
+          if (!vivo) return;
+          setMensagemErro(
+            `O link cadastrado para ${titulo.toLowerCase()} não aponta para um PDF ` +
+              `(o servidor devolveu ${analise.rotulo}). É preciso corrigir o arquivo no cadastro do terreno.`
+          );
+          setFase("erro");
+          return;
+        }
+        if (analise.deslocamento > 0) {
+          console.warn(`[PDF] ${titulo}: ignorando ${analise.deslocamento} byte(s) antes do cabeçalho do PDF.`);
+          dados = dados.slice(analise.deslocamento);
+        }
       } catch (err) {
-        // Não é fatal: o pdf.js ainda pode buscar a URL por conta própria.
+        // Não é fatal por si só: o pdf.js ainda pode buscar a URL por conta própria.
         console.warn("[PDF] download direto falhou, tentando pelo pdf.js:", err);
       }
       if (!vivo) return;
@@ -231,9 +292,12 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
         console.error("[PDF] falha ao abrir o documento:", err);
         if (!vivo) return;
         setMensagemErro(
-          dados
-            ? "O arquivo pode estar corrompido ou em um formato não suportado."
-            : "Verifique sua conexão e tente novamente."
+          diagnostico ||
+            (err?.name === "InvalidPDFException"
+              ? "O arquivo cadastrado não é um PDF válido. É preciso reenviá-lo no cadastro do terreno."
+              : dados
+                ? "O arquivo pode estar corrompido ou em um formato não suportado."
+                : "Verifique sua conexão e tente novamente.")
         );
         setFase("erro");
       }
@@ -254,7 +318,7 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
         blobUrlRef.current = null;
       }
     };
-  }, [url, tentativa]);
+  }, [url, titulo, tentativa]);
 
   // ---- desenho da página --------------------------------------------------
   const desenhar = useCallback(async () => {
