@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // ---------------------------------------------------------------------------
 
 const PDFJS_VERSAO = "3.11.174";
+const MAMMOTH_VERSAO = "1.6.0";
 
 // Duas origens: se a primeira estiver indisponível/bloqueada na rede do
 // celular, a segunda é tentada antes de desistir.
@@ -106,6 +107,67 @@ function carregarPdfJs() {
   return promessaPdfJs;
 }
 
+const MAMMOTH_CDNS = [
+  `https://cdn.jsdelivr.net/npm/mammoth@${MAMMOTH_VERSAO}/mammoth.browser.min.js`,
+  `https://unpkg.com/mammoth@${MAMMOTH_VERSAO}/mammoth.browser.min.js`,
+];
+
+let promessaMammoth = null;
+
+/**
+ * Carrega o mammoth.js sob demanda -- usado quando o documento cadastrado é
+ * .docx em vez de PDF (caso do memorial descritivo, que hoje sai em Word).
+ * Mesmo padrão do pdf.js: <script> de CDN, com origem reserva.
+ */
+function carregarMammoth() {
+  if (typeof window !== "undefined" && window.mammoth) {
+    return Promise.resolve(window.mammoth);
+  }
+  if (promessaMammoth) return promessaMammoth;
+
+  promessaMammoth = new Promise((resolve, reject) => {
+    const tentar = (indice) => {
+      if (indice >= MAMMOTH_CDNS.length) {
+        promessaMammoth = null;
+        reject(new Error("Não foi possível carregar o leitor de Word."));
+        return;
+      }
+
+      const script = document.createElement("script");
+      let encerrado = false;
+
+      const seguir = (ok) => {
+        if (encerrado) return;
+        encerrado = true;
+        clearTimeout(cronometro);
+        if (ok) return;
+        script.remove();
+        tentar(indice + 1);
+      };
+
+      const cronometro = setTimeout(() => seguir(false), TEMPO_LIMITE_SCRIPT);
+
+      script.src = MAMMOTH_CDNS[indice];
+      script.async = true;
+      script.onload = () => {
+        if (!window.mammoth) {
+          seguir(false);
+          return;
+        }
+        seguir(true);
+        resolve(window.mammoth);
+      };
+      script.onerror = () => seguir(false);
+
+      document.head.appendChild(script);
+    };
+
+    tentar(0);
+  });
+
+  return promessaMammoth;
+}
+
 function limitarZoom(valor) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, valor));
 }
@@ -127,18 +189,27 @@ function analisarArquivo(buffer) {
   // Alguns arquivos chegam com BOM ou lixo antes do cabeçalho; se o "%PDF-"
   // existir logo no início do arquivo, dá pra aproveitar a partir dali.
   const posicao = texto.indexOf("%PDF-");
-  if (posicao === 0) return { ehPdf: true, deslocamento: 0, rotulo: "PDF", previa: "" };
-  if (posicao > 0) return { ehPdf: true, deslocamento: posicao, rotulo: "PDF", previa: "" };
+  if (posicao === 0) return { ehPdf: true, ehDocx: false, deslocamento: 0, rotulo: "PDF", previa: "" };
+  if (posicao > 0) return { ehPdf: true, ehDocx: false, deslocamento: posicao, rotulo: "PDF", previa: "" };
 
   const inicio = texto.slice(0, 120).trim();
+  const ehZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  // Um .docx é um ZIP; o que o identifica é o conteúdo interno do pacote
+  // Office, cujos nomes de arquivo aparecem em texto claro logo no início.
+  const ehDocx =
+    ehZip && (texto.includes("word/") || texto.includes("[Content_Types].xml"));
+  if (ehDocx) {
+    return { ehPdf: false, ehDocx: true, deslocamento: 0, rotulo: "documento Word (.docx)", previa: "" };
+  }
+
   let rotulo = "arquivo desconhecido";
-  if (bytes[0] === 0x50 && bytes[1] === 0x4b) rotulo = "arquivo ZIP/Word (.docx)";
+  if (ehZip) rotulo = "arquivo ZIP";
   else if (/^<(!doctype|html|\?xml)/i.test(inicio)) rotulo = "página HTML";
   else if (/^[[{]/.test(inicio)) rotulo = "resposta JSON";
   else if (bytes[0] === 0xff && bytes[1] === 0xd8) rotulo = "imagem JPEG";
   else if (bytes[0] === 0x89 && bytes[1] === 0x50) rotulo = "imagem PNG";
 
-  return { ehPdf: false, deslocamento: 0, rotulo, previa: inicio };
+  return { ehPdf: false, ehDocx: false, deslocamento: 0, rotulo, previa: inicio };
 }
 
 function distanciaEntreToques(toques) {
@@ -166,6 +237,7 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
   const [zoom, setZoom] = useState(1);
   const [tentativa, setTentativa] = useState(0);
   const [urlNativa, setUrlNativa] = useState(null);
+  const [htmlDocumento, setHtmlDocumento] = useState("");
 
   const docRef = useRef(null);
   const canvasRef = useRef(null);
@@ -184,6 +256,7 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
     setPagina(1);
     setZoom(1);
     setUrlNativa(null);
+    setHtmlDocumento("");
     docRef.current = null;
 
     const criarUrlNativa = (dados) => {
@@ -222,6 +295,29 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
         dados = await resposta.arrayBuffer();
 
         const analise = analisarArquivo(dados);
+
+        // O memorial descritivo é gerado em Word (.docx), não em PDF. Em vez
+        // de recusar o arquivo, ele é convertido em HTML aqui mesmo e exibido
+        // na mesma tela -- continua tudo dentro do Vertent-Web, sem download e
+        // sem abrir aplicativo externo.
+        if (analise.ehDocx) {
+          try {
+            const mammoth = await carregarMammoth();
+            const resultado = await mammoth.convertToHtml({ arrayBuffer: dados });
+            if (!vivo) return;
+            const html = (resultado?.value || "").trim();
+            if (!html) throw new Error("documento Word sem conteúdo legível");
+            setHtmlDocumento(html);
+            setFase("word");
+          } catch (erroWord) {
+            console.error(`[PDF] ${titulo}: falha ao converter o .docx:`, erroWord);
+            if (!vivo) return;
+            setMensagemErro("Não foi possível converter o documento do Word. Verifique sua conexão e tente novamente.");
+            setFase("erro");
+          }
+          return;
+        }
+
         if (!analise.ehPdf) {
           console.error(
             `[PDF] ${titulo}: o link não devolveu um PDF, e sim ${analise.rotulo}. ` +
@@ -501,6 +597,14 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
           </div>
         )}
 
+        {fase === "word" && (
+          <div
+            className="vertent-doc"
+            style={{ ...estilos.folhaWord, fontSize: `${Math.round(15 * zoom)}px` }}
+            dangerouslySetInnerHTML={{ __html: htmlDocumento }}
+          />
+        )}
+
         {fase === "nativo" && urlNativa && (
           <iframe title={titulo} src={urlNativa} style={estilos.iframe} />
         )}
@@ -514,7 +618,7 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
         />
       </div>
 
-      {fase === "ok" && (
+      {(fase === "ok" || fase === "word") && (
         <div style={estilos.barraInferior}>
           <div style={estilos.grupoControles}>
             <button
@@ -538,7 +642,7 @@ export function VisualizadorPdf({ titulo, url, onVoltar }) {
             </button>
           </div>
 
-          {totalPaginas > 1 && (
+          {fase === "ok" && totalPaginas > 1 && (
             <div style={estilos.grupoControles}>
               <button
                 type="button"
@@ -600,6 +704,12 @@ const CSS_INTERNO = `
 @keyframes vertent-pdf-girar { to { transform: rotate(360deg); } }
 .vertent-pdf-area { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .vertent-pdf-area::-webkit-scrollbar { width: 8px; height: 8px; }
+.vertent-doc p { margin: 0 0 0.7em; }
+.vertent-doc h1, .vertent-doc h2, .vertent-doc h3 { margin: 1.1em 0 0.5em; line-height: 1.3; }
+.vertent-doc img { max-width: 100%; height: auto; }
+.vertent-doc table { border-collapse: collapse; width: 100%; margin: 0 0 1em; font-size: 0.92em; }
+.vertent-doc td, .vertent-doc th { border: 1px solid rgba(15,23,42,0.2); padding: 5px 7px; vertical-align: top; }
+.vertent-doc a { color: #166534; }
 `;
 
 const estilos = {
@@ -660,6 +770,19 @@ const estilos = {
     boxShadow: "0 2px 10px rgba(15,23,42,0.14)",
     maxWidth: "none",
     transformOrigin: "center top",
+  },
+  folhaWord: {
+    background: "#ffffff",
+    boxShadow: "0 2px 10px rgba(15,23,42,0.14)",
+    borderRadius: 4,
+    padding: "22px 18px",
+    width: "100%",
+    maxWidth: 820,
+    boxSizing: "border-box",
+    lineHeight: 1.55,
+    color: "#1f2937",
+    textAlign: "left",
+    overflowWrap: "anywhere",
   },
   iframe: {
     flex: 1,

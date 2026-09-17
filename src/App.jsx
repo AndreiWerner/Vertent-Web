@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useProgress } from "@react-three/drei";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Terrenos } from "./components/Terrenos";
 import { Confrontantes } from "./components/Confrontantes";
 import { StatusScreen } from "./components/StatusScreen";
@@ -75,13 +75,45 @@ function App() {
   // (download, decodificação, loading, erro) é responsabilidade do
   // visualizador, pra que nenhuma falha resulte em tela branca.
   const [pdfAtivo, setPdfAtivo] = useState(null); // { titulo, url } | null
+  // Controla se FOMOS NÓS quem empilhou a entrada de histórico ao abrir
+  // o documento (ver abrirPdf/fecharPdf abaixo) -- evita chamar
+  // history.back() por engano se o popstate disparar por outro motivo.
+  const historicoDocumentoRef = useRef(false);
 
   const abrirPdf = (url, titulo) => {
     if (!url) return;
     setPdfAtivo({ titulo, url });
+    // Empilha uma entrada de histórico só para o documento. Assim, o
+    // botão/gesto físico de "voltar" do Android -- que no WebView do
+    // app mobile normalmente navegaria para fora da página ou fecharia
+    // a WebView -- fecha primeiro a tela do documento, do mesmo jeito
+    // que o botão "Voltar" already visível no topo da tela.
+    historicoDocumentoRef.current = true;
+    window.history.pushState({ vertentDocumento: true }, "");
   };
 
-  const fecharPdf = () => setPdfAtivo(null);
+  const fecharPdf = () => {
+    if (historicoDocumentoRef.current) {
+      // Consome a entrada que empilhamos; o listener de popstate abaixo
+      // é quem efetivamente fecha a tela (setPdfAtivo(null)) quando o
+      // history.back() disparar.
+      window.history.back();
+    } else {
+      setPdfAtivo(null);
+    }
+  };
+
+  // Botão/gesto físico de "voltar" (Android/WebView): se houver um
+  // documento aberto, fecha ele em vez de deixar a navegação sair da
+  // página do Vertent-Web.
+  useEffect(() => {
+    const aoNavegarParaTras = () => {
+      historicoDocumentoRef.current = false;
+      setPdfAtivo((atual) => (atual ? null : atual));
+    };
+    window.addEventListener("popstate", aoNavegarParaTras);
+    return () => window.removeEventListener("popstate", aoNavegarParaTras);
+  }, []);
 
   useEffect(() => {
     if (status.state !== "ready" || !status.matricula) return;
